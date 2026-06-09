@@ -644,19 +644,32 @@ function updateHeaderStatus() {
   }
 }
 
-// ===== THREADS API =====
-async function fetchMyPosts() {
-  const url = `${THREADS_BASE}/${settings.userId}/threads?fields=id,text,media_type,permalink,timestamp&limit=20&access_token=${settings.accessToken}`;
-  const res = await fetch(url);
+// ===== THREADS API (Supabase Edge Functionプロキシ経由) =====
+const THREADS_PROXY = `${SUPABASE_URL}/functions/v1/threads-proxy`;
+
+async function threadsCall(endpoint, params = {}) {
+  const res = await fetch(THREADS_PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Threads-Token': settings.accessToken },
+    body: JSON.stringify({ endpoint, params })
+  });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error));
+  return data;
+}
+
+async function fetchMyPosts() {
+  const data = await threadsCall(`/${settings.userId}/threads`, {
+    fields: 'id,text,media_type,permalink,timestamp',
+    limit: '20'
+  });
   return data.data || [];
 }
 
 async function fetchPostInsights(postId) {
-  const url = `${THREADS_BASE}/${postId}/insights?metric=views,likes,replies,reposts,quotes&access_token=${settings.accessToken}`;
-  const res = await fetch(url);
-  const data = await res.json();
+  const data = await threadsCall(`/${postId}/insights`, {
+    metric: 'views,likes,replies,reposts,quotes'
+  });
   if (!data.data) return {};
   const m = {};
   data.data.forEach(item => {
@@ -666,10 +679,10 @@ async function fetchPostInsights(postId) {
 }
 
 async function searchThreads(keyword) {
-  const url = `${THREADS_BASE}/threads?keyword=${encodeURIComponent(keyword)}&fields=id,text,username,timestamp,media_type,permalink&access_token=${settings.accessToken}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
+  const data = await threadsCall('/threads', {
+    keyword,
+    fields: 'id,text,username,timestamp,media_type,permalink'
+  });
   return data.data || [];
 }
 
