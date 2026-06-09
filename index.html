@@ -566,6 +566,23 @@
       <button class="btn btn-primary" onclick="doResearch()" id="btnResearch">🔍 1件検索</button>
       <button class="btn btn-gold" onclick="doTrendScan()" id="btnTrend">📊 一括トレンド調査</button>
     </div>
+    <div class="alert alert-warning" style="margin-top:10px;font-size:11px;">
+      ⚠️ アプリが<strong>開発中モード</strong>のため公開投稿の検索は制限されます。下の「手動貼り付け分析」でも同じ分析ができるっちゃ。
+    </div>
+  </div>
+
+  <!-- 手動貼り付け分析 -->
+  <div class="card">
+    <div class="card-title">📋 手動貼り付け分析（メイン機能）</div>
+    <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Threadsで気になった投稿テキストをコピペして貼り付けるっちゃ。Claudeがバズパターンを分析するっちゃよ。</p>
+    <div class="form-group">
+      <label class="form-label">競合・参考投稿テキスト（1投稿ごとに改行で区切るっちゃ）</label>
+      <textarea class="form-input" id="manualPostsInput" rows="8" placeholder="---投稿1---&#10;プレ花嫁さん必見✨ ドレス試着で後悔しないための3つのポイント...&#10;&#10;---投稿2---&#10;結婚式まで3ヶ月。花嫁ダイエット始めました..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-gold" onclick="analyzeManualPosts()" id="btnManual">🤖 Claude分析する</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('manualPostsInput').value=''">クリア</button>
+    </div>
   </div>
 
   <!-- 自分 vs トレンド比較 -->
@@ -1010,12 +1027,41 @@ async function runResearchForKeywords(keywords, isBatch) {
       await renderComparisonCard(allResults);
     }
   } catch (e) {
-    showToast('エラー: ' + e.message);
-    document.getElementById('researchResults').innerHTML = `<div class="alert alert-warning">⚠️ ${e.message}</div>`;
+    const msg = e.message || '';
+    const isPermError = msg.includes('permissions') || msg.includes('Unsupported') || msg.includes('does not exist');
+    document.getElementById('researchResults').innerHTML = `
+      <div class="alert alert-warning">
+        ${isPermError
+          ? '⚠️ <strong>公開投稿の検索はアプリ審査後に使えるっちゃ。</strong><br>下の「手動貼り付け分析」でThreadsからコピペした投稿を分析できるっちゃよ！'
+          : `⚠️ エラー: ${msg}`}
+      </div>`;
   } finally {
     showLoading(false);
     document.getElementById('btnResearch').disabled = false;
     document.getElementById('btnTrend').disabled = false;
+  }
+}
+
+async function analyzeManualPosts() {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const raw = document.getElementById('manualPostsInput').value.trim();
+  if (!raw) { showToast('投稿テキストを入力してくださいっちゃ'); return; }
+
+  // 投稿を分割（--- または 空行2つ で区切り）
+  const posts = raw.split(/---.*?---|(?:\r?\n){2,}/).map(s => s.trim()).filter(s => s.length > 5);
+  if (!posts.length) { showToast('投稿が見つからんかったっちゃ。改行で区切ってくださいっちゃ'); return; }
+
+  showLoading(true, `${posts.length}件の投稿をClaude分析中...`);
+  document.getElementById('btnManual').disabled = true;
+  try {
+    const fakeData = posts.map(text => ({ text }));
+    await runClaudeAnalysis('手動貼り付け', fakeData);
+    showToast(`${posts.length}件を分析したっちゃ！`);
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnManual').disabled = false;
   }
 }
 
