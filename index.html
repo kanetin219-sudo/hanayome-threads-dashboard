@@ -382,6 +382,62 @@
     border-color: var(--pink);
     color: white;
   }
+  .kw-category-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--gray);
+    margin-bottom: 5px;
+  }
+  .kw-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--pink);
+    color: white;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  .kw-tag button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    line-height: 1;
+  }
+  .analysis-card {
+    background: var(--pink-pale);
+    border: 1px solid var(--pink-light);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .analysis-card-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--pink);
+    margin-bottom: 6px;
+  }
+  .analysis-card-body {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--dark);
+  }
+  .compare-stat {
+    background: var(--white);
+    border: 1px solid var(--pink-light);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+  .compare-stat-label { font-size: 10px; color: var(--gray); margin-bottom: 4px; }
+  .compare-stat-row { display: flex; justify-content: space-around; align-items: flex-end; gap: 8px; }
+  .compare-stat-mine { font-size: 18px; font-weight: bold; color: var(--pink); }
+  .compare-stat-rival { font-size: 18px; font-weight: bold; color: var(--gold); }
+  .compare-stat-sub { font-size: 9px; color: var(--gray); }
 </style>
 </head>
 <body>
@@ -463,31 +519,75 @@
 <!-- ===== RESEARCH TAB ===== -->
 <div class="tab-content" id="tab-research">
 
+  <!-- キーワード選択 -->
   <div class="card">
-    <div class="card-title">🔍 キーワードで投稿を検索</div>
-    <div class="form-group">
-      <div class="form-input-row">
-        <input type="text" class="form-input" id="researchKeyword" placeholder="例: 花嫁　結婚式　ウェディング" />
-        <button class="btn btn-primary" onclick="doResearch()" id="btnResearch">検索</button>
+    <div class="card-title">🔍 キーワード検索 & トレンド調査</div>
+
+    <div style="margin-bottom:10px;">
+      <div class="kw-category-label">📌 準備・全般</div>
+      <div class="theme-chips">
+        <button class="theme-chip" onclick="toggleResearchKw(this,'花嫁')">花嫁</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'プレ花嫁')">プレ花嫁</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'結婚式')">結婚式</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'ウェディング')">ウェディング</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'結婚式準備')">結婚式準備</button>
+      </div>
+      <div class="kw-category-label" style="margin-top:8px;">👗 ドレス・衣装</div>
+      <div class="theme-chips">
+        <button class="theme-chip" onclick="toggleResearchKw(this,'ドレス試着')">ドレス試着</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'ウェディングドレス')">ウェディングドレス</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'色打掛')">色打掛</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'前撮り')">前撮り</button>
+      </div>
+      <div class="kw-category-label" style="margin-top:8px;">💄 美容・ダイエット</div>
+      <div class="theme-chips">
+        <button class="theme-chip" onclick="toggleResearchKw(this,'花嫁ダイエット')">花嫁ダイエット</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'ブライダルエステ')">ブライダルエステ</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'花嫁美容')">花嫁美容</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'花嫁ネイル')">花嫁ネイル</button>
+      </div>
+      <div class="kw-category-label" style="margin-top:8px;">💒 式当日・新婚</div>
+      <div class="theme-chips">
+        <button class="theme-chip" onclick="toggleResearchKw(this,'結婚式当日')">結婚式当日</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'新婚生活')">新婚生活</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'指輪')">指輪</button>
+        <button class="theme-chip" onclick="toggleResearchKw(this,'ハネムーン')">ハネムーン</button>
       </div>
     </div>
-    <div class="theme-chips" id="keywordChips">
-      <button class="theme-chip" onclick="setKeyword('花嫁')">花嫁</button>
-      <button class="theme-chip" onclick="setKeyword('結婚式')">結婚式</button>
-      <button class="theme-chip" onclick="setKeyword('ウェディング')">ウェディング</button>
-      <button class="theme-chip" onclick="setKeyword('プレ花嫁')">プレ花嫁</button>
-      <button class="theme-chip" onclick="setKeyword('花嫁ダイエット')">花嫁ダイエット</button>
-      <button class="theme-chip" onclick="setKeyword('ドレス試着')">ドレス試着</button>
+
+    <div class="form-input-row" style="margin-bottom:10px;">
+      <input type="text" class="form-input" id="researchKeyword" placeholder="カスタムキーワードを追加" />
+      <button class="btn btn-outline" onclick="addCustomKw()">追加</button>
+    </div>
+
+    <div id="selectedKwTags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;min-height:28px;"></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="doResearch()" id="btnResearch">🔍 1件検索</button>
+      <button class="btn btn-gold" onclick="doTrendScan()" id="btnTrend">📊 一括トレンド調査</button>
     </div>
   </div>
 
+  <!-- 自分 vs トレンド比較 -->
+  <div class="card" id="comparisonCard" style="display:none;">
+    <div class="card-title">📊 自分 vs トレンド比較</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;" id="comparisonGrid"></div>
+    <canvas id="comparisonChart" height="100" style="margin-top:12px;"></canvas>
+  </div>
+
+  <!-- 検索結果 -->
   <div id="researchResults"></div>
 
+  <!-- バズパターン分析 -->
   <div id="researchAnalysis" style="display:none;">
-    <div class="section-header">
-      <div class="section-title">🤖 Claude分析結果</div>
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">🤖 バズパターン分析</div>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('researchAnalysis').style.display='none'">閉じる</button>
+      </div>
+      <div id="analysisCards"></div>
+      <div class="analysis-box" id="analysisText" style="margin-top:10px;"></div>
     </div>
-    <div class="analysis-box" id="analysisText"></div>
   </div>
 </div>
 
@@ -821,30 +921,93 @@ function renderDashboard(posts) {
 }
 
 // ===== RESEARCH =====
+let selectedResearchKws = [];
+let comparisonChart = null;
+
+function toggleResearchKw(el, kw) {
+  if (selectedResearchKws.includes(kw)) {
+    selectedResearchKws = selectedResearchKws.filter(k => k !== kw);
+    el.classList.remove('active');
+  } else {
+    selectedResearchKws.push(kw);
+    el.classList.add('active');
+  }
+  renderKwTags();
+}
+
+function addCustomKw() {
+  const input = document.getElementById('researchKeyword');
+  const kw = input.value.trim();
+  if (!kw) return;
+  if (!selectedResearchKws.includes(kw)) {
+    selectedResearchKws.push(kw);
+    renderKwTags();
+  }
+  input.value = '';
+}
+
+function removeKw(kw) {
+  selectedResearchKws = selectedResearchKws.filter(k => k !== kw);
+  document.querySelectorAll('.theme-chip').forEach(el => {
+    if (el.textContent === kw) el.classList.remove('active');
+  });
+  renderKwTags();
+}
+
+function renderKwTags() {
+  const el = document.getElementById('selectedKwTags');
+  el.innerHTML = selectedResearchKws.map(kw =>
+    `<span class="kw-tag">${kw} <button onclick="removeKw('${kw}')">×</button></span>`
+  ).join('');
+}
+
 function setKeyword(kw) {
   document.getElementById('researchKeyword').value = kw;
 }
 
 async function doResearch() {
-  const keyword = document.getElementById('researchKeyword').value.trim();
-  if (!keyword) { showToast('キーワードを入力してくださいっちゃ'); return; }
+  const kwInput = document.getElementById('researchKeyword').value.trim();
+  const keywords = kwInput ? [kwInput] : selectedResearchKws.slice(0, 1);
+  if (!keywords.length) { showToast('キーワードを選択か入力してくださいっちゃ'); return; }
+  await runResearchForKeywords(keywords, false);
+}
+
+async function doTrendScan() {
+  if (!selectedResearchKws.length) { showToast('キーワードを選択してくださいっちゃ'); return; }
+  await runResearchForKeywords(selectedResearchKws, true);
+}
+
+async function runResearchForKeywords(keywords, isBatch) {
   if (!settings.accessToken) { showToast('先にThreadsの設定をしてくださいっちゃ！'); return; }
-  showLoading(true, '検索中...');
+  showLoading(true, isBatch ? `${keywords.length}キーワードを一括検索中...` : '検索中...');
   document.getElementById('btnResearch').disabled = true;
+  document.getElementById('btnTrend').disabled = true;
   document.getElementById('researchAnalysis').style.display = 'none';
+  document.getElementById('comparisonCard').style.display = 'none';
+
+  const allResults = [];
   try {
-    const results = await searchThreads(keyword);
-    renderResearchResults(keyword, results);
-    if (results.length > 0) {
-      await sb.from('research_results').insert(results.map(r => ({
-        keyword,
-        post_id: r.id,
-        text: r.text || '',
-        username: r.username || '',
-        permalink: r.permalink || '',
-        posted_at: r.timestamp,
-        searched_at: new Date().toISOString(),
-      })));
+    for (let i = 0; i < keywords.length; i++) {
+      const kw = keywords[i];
+      showLoading(true, `「${kw}」を検索中 (${i+1}/${keywords.length})...`);
+      const results = await searchThreads(kw);
+      results.forEach(r => { r._keyword = kw; });
+      allResults.push(...results);
+      if (results.length > 0) {
+        await sb.from('research_results').insert(results.map(r => ({
+          keyword: kw,
+          post_id: r.id,
+          text: r.text || '',
+          username: r.username || '',
+          permalink: r.permalink || '',
+          posted_at: r.timestamp,
+          searched_at: new Date().toISOString(),
+        }))).select();
+      }
+    }
+    renderResearchResults(keywords, allResults);
+    if (allResults.length > 0) {
+      await renderComparisonCard(allResults);
     }
   } catch (e) {
     showToast('エラー: ' + e.message);
@@ -852,59 +1015,201 @@ async function doResearch() {
   } finally {
     showLoading(false);
     document.getElementById('btnResearch').disabled = false;
+    document.getElementById('btnTrend').disabled = false;
   }
 }
 
-function renderResearchResults(keyword, results) {
+function renderResearchResults(keywords, results) {
   const el = document.getElementById('researchResults');
+  const kwLabel = keywords.join('・');
   if (!results.length) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>該当する投稿が見つからんかったっちゃ</p></div>';
     return;
   }
+
+  // キーワード別にグループ化
+  const grouped = {};
+  results.forEach(r => {
+    const kw = r._keyword || keywords[0];
+    if (!grouped[kw]) grouped[kw] = [];
+    grouped[kw].push(r);
+  });
+
+  const sections = Object.entries(grouped).map(([kw, posts]) => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="section-header">
+        <div class="section-title">「${kw}」 ${posts.length}件</div>
+        <button class="btn btn-gold btn-sm" onclick="analyzeResearch('${kw.replace(/'/g,"\\'")}')">🤖 分析</button>
+      </div>
+      ${posts.slice(0, 8).map(r => {
+        const text = (r.text || '（テキストなし）').replace(/</g, '&lt;');
+        const d = new Date(r.timestamp);
+        const dateStr = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}`;
+        const len = (r.text || '').length;
+        return `<div class="research-result">
+          <div class="research-result-text">${text}</div>
+          <div class="research-meta">
+            <span>👤 @${r.username || '不明'}</span>
+            <span>📅 ${dateStr}</span>
+            <span>📝 ${len}文字</span>
+            ${r.permalink ? `<a href="${r.permalink}" target="_blank" style="color:var(--pink);">🔗</a>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
   el.innerHTML = `
-    <div class="section-header">
-      <div class="section-title">「${keyword}」の検索結果（${results.length}件）</div>
-      <button class="btn btn-gold btn-sm" onclick="analyzeResearch('${keyword.replace(/'/g, "\\'")}')">🤖 Claude分析</button>
+    <div class="section-header" style="margin-bottom:8px;">
+      <div class="section-title">🔍 トレンド検索結果（計${results.length}件）</div>
+      <button class="btn btn-gold btn-sm" onclick="analyzeAllResearch(${JSON.stringify(keywords).replace(/"/g,'&quot;')})">🤖 全件まとめ分析</button>
     </div>
-    ${results.slice(0, 15).map(r => {
-      const text = (r.text || '（テキストなし）').replace(/</g, '&lt;');
-      const d = new Date(r.timestamp);
-      const dateStr = isNaN(d) ? '' : `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
-      return `<div class="research-result">
-        <div class="research-result-text">${text}</div>
-        <div class="research-meta">
-          <span>👤 @${r.username || '不明'}</span>
-          <span>📅 ${dateStr}</span>
-          ${r.permalink ? `<a href="${r.permalink}" target="_blank" style="color:var(--pink);">🔗 リンク</a>` : ''}
-        </div>
-      </div>`;
-    }).join('')}`;
+    ${sections}`;
+}
+
+async function renderComparisonCard(researchResults) {
+  const { data: myPosts } = await sb.from('threads_posts').select('views,likes,replies,reposts').order('posted_at', { ascending: false }).limit(20);
+  if (!myPosts || myPosts.length === 0) return;
+
+  const myAvgViews = Math.round(myPosts.reduce((s,p) => s+(p.views||0), 0) / myPosts.length);
+  const myAvgLikes = Math.round(myPosts.reduce((s,p) => s+(p.likes||0), 0) / myPosts.length);
+  const myAvgReplies = Math.round(myPosts.reduce((s,p) => s+(p.replies||0), 0) / myPosts.length);
+
+  // リサーチ結果はテキスト長のみ計測（メトリクスなし）
+  const avgTextLen = Math.round(researchResults.reduce((s,r) => s+(r.text||'').length, 0) / researchResults.length);
+  const myAvgTextLen = Math.round(myPosts.reduce((s,p) => 0, 0)); // placeholder
+
+  document.getElementById('comparisonCard').style.display = 'block';
+
+  document.getElementById('comparisonGrid').innerHTML = `
+    <div class="compare-stat">
+      <div class="compare-stat-label">自分の平均閲覧数</div>
+      <div class="compare-stat-row">
+        <div><div class="compare-stat-mine">${myAvgViews.toLocaleString()}</div><div class="compare-stat-sub">自分</div></div>
+      </div>
+    </div>
+    <div class="compare-stat">
+      <div class="compare-stat-label">自分の平均いいね</div>
+      <div class="compare-stat-row">
+        <div><div class="compare-stat-mine">${myAvgLikes.toLocaleString()}</div><div class="compare-stat-sub">自分</div></div>
+      </div>
+    </div>
+    <div class="compare-stat">
+      <div class="compare-stat-label">トレンド投稿数</div>
+      <div class="compare-stat-row">
+        <div><div class="compare-stat-rival">${researchResults.length}</div><div class="compare-stat-sub">件</div></div>
+      </div>
+    </div>
+    <div class="compare-stat">
+      <div class="compare-stat-label">トレンド平均文字数</div>
+      <div class="compare-stat-row">
+        <div><div class="compare-stat-rival">${avgTextLen}</div><div class="compare-stat-sub">文字</div></div>
+      </div>
+    </div>`;
+
+  if (comparisonChart) comparisonChart.destroy();
+  const ctx = document.getElementById('comparisonChart').getContext('2d');
+  comparisonChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['閲覧数', 'いいね', '返信'],
+      datasets: [{
+        label: '自分（平均）',
+        data: [myAvgViews, myAvgLikes, myAvgReplies],
+        backgroundColor: 'rgba(212,120,154,0.7)',
+        borderColor: '#d4789a',
+        borderWidth: 1.5,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
 }
 
 async function analyzeResearch(keyword) {
   if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
-  showLoading(true, 'Claude分析中...');
+  showLoading(true, 'Claudeがバズパターンを分析中...');
   try {
-    const { data } = await sb.from('research_results').select('text,username').eq('keyword', keyword).order('searched_at', { ascending: false }).limit(15);
-    const postTexts = (data || []).map((r, i) => `[${i+1}] ${r.text}`).join('\n\n');
-    const system = `あなたはSNSマーケティングの専門家です。Threadsの投稿データを分析して、バズるコンテンツのパターンを解明します。分析は簡潔で実践的に、日本語で回答してください。`;
-    const prompt = `以下は「${keyword}」で検索したThreadsの投稿です。
-
-${postTexts}
-
-以下の観点で分析してください：
-1. **バズりやすい投稿の共通パターン**（文体・構成・感情訴求など）
-2. **よく使われているテーマ・切り口**（上位3〜5つ）
-3. **エンゲージメントを高める要素**（問いかけ・共感・情報価値など）
-4. **花嫁アカウントで活用できる具体的な投稿アイデア**（3案）`;
-    const analysis = await callClaude(system, prompt);
-    document.getElementById('analysisText').textContent = analysis;
-    document.getElementById('researchAnalysis').style.display = 'block';
+    const { data } = await sb.from('research_results').select('text').eq('keyword', keyword).order('searched_at', { ascending: false }).limit(15);
+    await runClaudeAnalysis(keyword, data || []);
   } catch (e) {
     showToast('エラー: ' + e.message);
   } finally {
     showLoading(false);
   }
+}
+
+async function analyzeAllResearch(keywords) {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  showLoading(true, 'Claudeが全キーワードを一括分析中...');
+  try {
+    const { data } = await sb.from('research_results').select('text,keyword').in('keyword', keywords).order('searched_at', { ascending: false }).limit(30);
+    await runClaudeAnalysis(keywords.join('・'), data || []);
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function runClaudeAnalysis(label, posts) {
+  const { data: myTopPosts } = await sb.from('threads_posts').select('text,views,likes').order('views', { ascending: false }).limit(5);
+  const postTexts = posts.map((r, i) => `[${i+1}] ${r.text || ''}`).join('\n\n');
+  const myTopText = myTopPosts ? myTopPosts.map(p => `・${(p.text||'').slice(0,50)}（閲覧:${p.views}）`).join('\n') : '（データなし）';
+
+  const system = `あなたはSNSマーケティングの専門家で、Threadsのバズ投稿の法則を解析します。分析は構造化されており、花嫁コンテンツ特有のインサイトを提供します。`;
+
+  const prompt = `「${label}」関連のThreads投稿データを分析してください。
+
+【検索で集めた投稿】
+${postTexts}
+
+【自分のバズった投稿（参考）】
+${myTopText}
+
+以下の形式で分析してください：
+
+## 🔥 バズパターン TOP3
+1. [パターン名]: [説明と具体例]
+2. [パターン名]: [説明と具体例]
+3. [パターン名]: [説明と具体例]
+
+## 💬 感情訴求タイプ分析
+- 共感型：[割合・特徴]
+- 情報型：[割合・特徴]
+- 体験型：[割合・特徴]
+
+## ✍️ 文体・構成の特徴
+- 文字数の傾向：
+- よく使われる語尾・表現：
+- 投稿の構成パターン：
+
+## 🎯 自分のアカウントへの応用（具体的に3点）
+1.
+2.
+3.`;
+
+  const analysis = await callClaude(system, prompt);
+
+  // セクション別にカードに分けて表示
+  const sections = analysis.split('\n## ').filter(s => s.trim());
+  const cards = sections.map(section => {
+    const lines = section.split('\n');
+    const title = lines[0].replace(/^#+ /, '').trim();
+    const body = lines.slice(1).join('\n').trim();
+    return `<div class="analysis-card">
+      <div class="analysis-card-title">${title}</div>
+      <div class="analysis-card-body">${body.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('analysisCards').innerHTML = cards;
+  document.getElementById('analysisText').textContent = '';
+  document.getElementById('researchAnalysis').style.display = 'block';
+  document.getElementById('researchAnalysis').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ===== SUGGESTIONS =====
