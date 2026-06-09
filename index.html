@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>花嫁Threads ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --pink: #d4789a;
+    --pink-light: #f9eef3;
+    --pink-pale: #fdf5f8;
+    --gold: #c9a96e;
+    --gold-light: #f7f0e2;
+    --dark: #3a2030;
+    --gray: #7a6070;
+    --gray-light: #f0eaed;
+    --white: #ffffff;
+    --shadow: 0 2px 16px rgba(212,120,154,0.12);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+    background: var(--pink-pale);
+    color: var(--dark);
+    min-height: 100vh;
+  }
+
+  /* ===== HEADER ===== */
+  .app-header {
+    background: linear-gradient(135deg, #d4789a 0%, #e8a0b8 50%, #c9a96e 100%);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(212,120,154,0.3);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .app-header h1 {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  .header-status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.2);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  /* ===== TABS ===== */
+  .tab-nav {
+    display: flex;
+    background: var(--white);
+    border-bottom: 2px solid var(--pink-light);
+    overflow-x: auto;
+    position: sticky;
+    top: 52px;
+    z-index: 99;
+  }
+  .tab-btn {
+    flex: 1;
+    min-width: 72px;
+    padding: 12px 8px;
+    border: none;
+    background: transparent;
+    color: var(--gray);
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    transition: all 0.2s;
+    font-family: inherit;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+  }
+  .tab-btn .tab-icon { font-size: 18px; }
+  .tab-btn:hover { color: var(--pink); background: var(--pink-pale); }
+  .tab-btn.active {
+    color: var(--pink);
+    border-bottom-color: var(--pink);
+  }
+
+  /* ===== CONTENT ===== */
+  .tab-content { display: none; padding: 16px; max-width: 900px; margin: 0 auto; }
+  .tab-content.active { display: block; }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--gray);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ===== STATS ===== */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  @media (min-width: 600px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+  .stat-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    border-top: 3px solid var(--pink);
+  }
+  .stat-card.gold { border-top-color: var(--gold); }
+  .stat-label { font-size: 10px; color: var(--gray); margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: bold; color: var(--dark); }
+  .stat-sub { font-size: 10px; color: var(--gray); margin-top: 2px; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    padding: 9px 18px;
+    border-radius: 20px;
+    border: none;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--pink); color: white; }
+  .btn-primary:hover { background: #c0607e; transform: translateY(-1px); }
+  .btn-gold { background: var(--gold); color: white; }
+  .btn-gold:hover { background: #b08548; transform: translateY(-1px); }
+  .btn-outline {
+    background: transparent;
+    border: 1.5px solid var(--pink);
+    color: var(--pink);
+  }
+  .btn-outline:hover { background: var(--pink-light); }
+  .btn-sm { padding: 5px 12px; font-size: 11px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ===== FORM ===== */
+  .form-group { margin-bottom: 14px; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--gray);
+    margin-bottom: 5px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid #e0d0d8;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--dark);
+    background: var(--white);
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { outline: none; border-color: var(--pink); }
+  .form-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .form-input-row .form-input { flex: 1; }
+
+  /* ===== TABLE ===== */
+  .post-table-wrap { overflow-x: auto; }
+  .post-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .post-table th {
+    background: var(--pink-light);
+    color: var(--gray);
+    font-weight: bold;
+    padding: 8px 10px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .post-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--pink-light);
+    vertical-align: top;
+  }
+  .post-table tr:hover td { background: var(--pink-pale); }
+  .post-text-cell {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .metric-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    color: var(--gray);
+  }
+
+  /* ===== RESEARCH ===== */
+  .research-result {
+    border: 1px solid var(--pink-light);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--white);
+  }
+  .research-result-text { font-size: 12px; line-height: 1.6; margin-bottom: 6px; }
+  .research-meta { font-size: 10px; color: var(--gray); display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* ===== ANALYSIS ===== */
+  .analysis-box {
+    background: linear-gradient(135deg, var(--pink-pale) 0%, var(--gold-light) 100%);
+    border: 1.5px solid var(--pink-light);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+  }
+
+  /* ===== SUGGESTIONS ===== */
+  .suggestion-card {
+    background: var(--white);
+    border: 1.5px solid var(--pink-light);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .suggestion-card.used { opacity: 0.5; }
+  .suggestion-text { font-size: 13px; line-height: 1.8; margin-bottom: 10px; }
+  .suggestion-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .suggestion-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--gold-light);
+    color: var(--gold);
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* ===== SETTINGS ===== */
+  .settings-section {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .settings-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--pink);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--pink-light);
+  }
+  .help-note {
+    font-size: 11px;
+    color: var(--gray);
+    background: var(--pink-pale);
+    border-radius: 6px;
+    padding: 8px 10px;
+    line-height: 1.6;
+    margin-top: 6px;
+  }
+
+  /* ===== LOADING ===== */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.8);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 4px solid var(--pink-light);
+    border-top-color: var(--pink);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg { color: var(--pink); font-size: 13px; font-weight: bold; }
+
+  /* ===== TOAST ===== */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--dark);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 1000;
+    transition: transform 0.3s;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray);
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13px; line-height: 1.8; }
+
+  /* ===== ALERT ===== */
+  .alert {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    margin-bottom: 12px;
+    line-height: 1.6;
+  }
+  .alert-warning { background: #fff8e1; border: 1px solid #ffe082; color: #7a5c00; }
+  .alert-success { background: #e8f5e9; border: 1px solid #a5d6a7; color: #2e7d32; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .section-title { font-size: 14px; font-weight: bold; color: var(--dark); }
+
+  .char-count { font-size: 10px; color: var(--gray); text-align: right; margin-top: 3px; }
+  .theme-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .theme-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    border: 1.5px solid var(--pink-light);
+    background: var(--white);
+    color: var(--gray);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .theme-chip:hover, .theme-chip.active {
+    background: var(--pink);
+    border-color: var(--pink);
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loadingMsg">読み込み中...</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ===== HEADER ===== -->
+<header class="app-header">
+  <h1>💍 花嫁Threads ダッシュボード</h1>
+  <span class="header-status" id="headerStatus">未接続</span>
+</header>
+
+<!-- ===== TAB NAV ===== -->
+<nav class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('dashboard')">
+    <span class="tab-icon">📊</span>投稿分析
+  </button>
+  <button class="tab-btn" onclick="showTab('research')">
+    <span class="tab-icon">🔍</span>競合リサーチ
+  </button>
+  <button class="tab-btn" onclick="showTab('suggest')">
+    <span class="tab-icon">✍️</span>投稿提案
+  </button>
+  <button class="tab-btn" onclick="showTab('settings')">
+    <span class="tab-icon">⚙️</span>設定
+  </button>
+</nav>
+
+<!-- ===== DASHBOARD TAB ===== -->
+<div class="tab-content active" id="tab-dashboard">
+
+  <div id="dashboardAlert"></div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-label">総投稿数</div>
+      <div class="stat-value" id="statPosts">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">平均閲覧数</div>
+      <div class="stat-value" id="statViews">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">平均いいね</div>
+      <div class="stat-value" id="statLikes">-</div>
+    </div>
+    <div class="stat-card gold">
+      <div class="stat-label">エンゲージメント率</div>
+      <div class="stat-value" id="statEngagement">-</div>
+      <div class="stat-sub">(いいね+返信+リポスト)÷閲覧</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">📈 直近の投稿パフォーマンス</div>
+      <button class="btn btn-primary" onclick="refreshDashboard()" id="btnRefresh">
+        🔄 データ更新
+      </button>
+    </div>
+    <canvas id="performanceChart" height="80"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 投稿一覧</div>
+    <div class="post-table-wrap" id="postsTableWrap">
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <p>「データ更新」ボタンを押すと<br>Threadsの投稿データを取得するっちゃ</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESEARCH TAB ===== -->
+<div class="tab-content" id="tab-research">
+
+  <div class="card">
+    <div class="card-title">🔍 キーワードで投稿を検索</div>
+    <div class="form-group">
+      <div class="form-input-row">
+        <input type="text" class="form-input" id="researchKeyword" placeholder="例: 花嫁　結婚式　ウェディング" />
+        <button class="btn btn-primary" onclick="doResearch()" id="btnResearch">検索</button>
+      </div>
+    </div>
+    <div class="theme-chips" id="keywordChips">
+      <button class="theme-chip" onclick="setKeyword('花嫁')">花嫁</button>
+      <button class="theme-chip" onclick="setKeyword('結婚式')">結婚式</button>
+      <button class="theme-chip" onclick="setKeyword('ウェディング')">ウェディング</button>
+      <button class="theme-chip" onclick="setKeyword('プレ花嫁')">プレ花嫁</button>
+      <button class="theme-chip" onclick="setKeyword('花嫁ダイエット')">花嫁ダイエット</button>
+      <button class="theme-chip" onclick="setKeyword('ドレス試着')">ドレス試着</button>
+    </div>
+  </div>
+
+  <div id="researchResults"></div>
+
+  <div id="researchAnalysis" style="display:none;">
+    <div class="section-header">
+      <div class="section-title">🤖 Claude分析結果</div>
+    </div>
+    <div class="analysis-box" id="analysisText"></div>
+  </div>
+</div>
+
+<!-- ===== SUGGEST TAB ===== -->
+<div class="tab-content" id="tab-suggest">
+
+  <div class="card">
+    <div class="card-title">✍️ 投稿を提案してもらう</div>
+    <div class="form-group">
+      <label class="form-label">テーマ（任意）</label>
+      <div class="theme-chips" id="themeChips">
+        <button class="theme-chip" onclick="toggleTheme(this, '結婚式準備')">結婚式準備</button>
+        <button class="theme-chip" onclick="toggleTheme(this, 'ドレス選び')">ドレス選び</button>
+        <button class="theme-chip" onclick="toggleTheme(this, '花嫁ダイエット')">花嫁ダイエット</button>
+        <button class="theme-chip" onclick="toggleTheme(this, '結婚式当日')">結婚式当日</button>
+        <button class="theme-chip" onclick="toggleTheme(this, '新婚生活')">新婚生活</button>
+        <button class="theme-chip" onclick="toggleTheme(this, '指輪・アクセサリー')">指輪・アクセサリー</button>
+        <button class="theme-chip" onclick="toggleTheme(this, '美容・スキンケア')">美容・スキンケア</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">補足・要望（任意）</label>
+      <textarea class="form-input" id="suggestNote" rows="2" placeholder="例: 共感を呼ぶ内容、情報系で、ハッシュタグも入れて"></textarea>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-gold" onclick="generateSuggestions(3)" id="btnSuggest">
+        ✨ 3本提案してもらう
+      </button>
+      <button class="btn btn-outline" onclick="generateSuggestions(1)">
+        1本だけ
+      </button>
+    </div>
+  </div>
+
+  <div id="suggestionsList"></div>
+
+  <div class="card" id="savedSuggestionsCard" style="display:none;">
+    <div class="section-header">
+      <div class="section-title">📚 保存済み提案</div>
+      <button class="btn btn-sm btn-outline" onclick="loadSavedSuggestions()">更新</button>
+    </div>
+    <div id="savedSuggestionsList"></div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS TAB ===== -->
+<div class="tab-content" id="tab-settings">
+
+  <div class="settings-section">
+    <div class="settings-title">🔑 Threads API 設定</div>
+    <div class="form-group">
+      <label class="form-label">Threads ユーザーID</label>
+      <input type="text" class="form-input" id="settingUserId" placeholder="例: 1234567890" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">アクセストークン</label>
+      <input type="password" class="form-input" id="settingToken" placeholder="EAAxxxxxxx..." />
+      <div class="help-note">
+        Meta Developer Console → Threads API → アクセストークンを取得<br>
+        必要なスコープ: threads_basic, threads_manage_insights
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-title">🤖 Claude AI 設定</div>
+    <div class="form-group">
+      <label class="form-label">Claude API Key</label>
+      <input type="password" class="form-input" id="settingClaudeKey" placeholder="sk-ant-..." />
+      <div class="help-note">
+        Anthropic Console (console.anthropic.com) からAPIキーを取得<br>
+        競合リサーチ分析・投稿提案の生成に使用するっちゃ
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" onclick="saveSettings()" style="width:100%;">
+    💾 設定を保存する
+  </button>
+
+  <div class="settings-section" style="margin-top:14px;">
+    <div class="settings-title">📖 使い方</div>
+    <div class="help-note" style="margin-top:0;">
+      <strong>① 設定</strong>：Threadsアクセストークン・Claude APIキーを入力して保存<br><br>
+      <strong>② 投稿分析</strong>：「データ更新」でThreadsの投稿データを取得。閲覧数・いいね・エンゲージメント率を確認できるっちゃ<br><br>
+      <strong>③ 競合リサーチ</strong>：キーワードで話題の投稿を検索 → 「Claude分析」でバズる投稿のパターンを分析<br><br>
+      <strong>④ 投稿提案</strong>：テーマを選んで「提案」ボタンを押すとClaudeが投稿文を3本考えてくれるっちゃ
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://voutbjsdhsxjedddaqll.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvdXRianNkaHN4amVkZGRhcWxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NjQwMDksImV4cCI6MjA5NjU0MDAwOX0.NxjKLpjojfBzl-978SwqepT6v4IJwz0KP82TBerIcdo';
+const EDGE_URL = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+const THREADS_BASE = 'https://graph.threads.net/v1.0';
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let settings = {};
+let postsChart = null;
+let selectedThemes = [];
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+  settings = loadSettings();
+  fillSettingsForm();
+  updateHeaderStatus();
+  loadDashboardFromDB();
+  loadSavedSuggestions();
+  if (!settings.userId || !settings.accessToken) {
+    document.getElementById('dashboardAlert').innerHTML =
+      '<div class="alert alert-warning">⚙️ まず「設定」タブでThreads APIキーを入力してくださいっちゃ</div>';
+  }
+});
+
+// ===== TABS =====
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ===== SETTINGS =====
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem('hanayome_settings') || '{}'); }
+  catch { return {}; }
+}
+function fillSettingsForm() {
+  document.getElementById('settingUserId').value = settings.userId || '';
+  document.getElementById('settingToken').value = settings.accessToken || '';
+  document.getElementById('settingClaudeKey').value = settings.claudeKey || '';
+}
+function saveSettings() {
+  settings = {
+    userId: document.getElementById('settingUserId').value.trim(),
+    accessToken: document.getElementById('settingToken').value.trim(),
+    claudeKey: document.getElementById('settingClaudeKey').value.trim(),
+  };
+  localStorage.setItem('hanayome_settings', JSON.stringify(settings));
+  updateHeaderStatus();
+  showToast('設定を保存したっちゃ！');
+  document.getElementById('dashboardAlert').innerHTML = '';
+}
+function updateHeaderStatus() {
+  const el = document.getElementById('headerStatus');
+  if (settings.userId && settings.accessToken) {
+    el.textContent = '✅ 接続中';
+    el.style.background = 'rgba(255,255,255,0.3)';
+  } else {
+    el.textContent = '⚠️ 未設定';
+  }
+}
+
+// ===== THREADS API =====
+async function fetchMyPosts() {
+  const url = `${THREADS_BASE}/${settings.userId}/threads?fields=id,text,media_type,permalink,timestamp&limit=20&access_token=${settings.accessToken}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.data || [];
+}
+
+async function fetchPostInsights(postId) {
+  const url = `${THREADS_BASE}/${postId}/insights?metric=views,likes,replies,reposts,quotes&access_token=${settings.accessToken}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data.data) return {};
+  const m = {};
+  data.data.forEach(item => {
+    m[item.name] = item.values?.[0]?.value ?? item.value ?? 0;
+  });
+  return m;
+}
+
+async function searchThreads(keyword) {
+  const url = `${THREADS_BASE}/threads?keyword=${encodeURIComponent(keyword)}&fields=id,text,username,timestamp,media_type,permalink&access_token=${settings.accessToken}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.data || [];
+}
+
+// ===== CLAUDE API =====
+async function callClaude(system, userMessage) {
+  if (!settings.claudeKey) throw new Error('Claude APIキーが設定されとらんっちゃ。設定タブで入力してくださいっちゃ');
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Claude-Key': settings.claudeKey },
+    body: JSON.stringify({ system, messages: [{ role: 'user', content: userMessage }] })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.content?.[0]?.text || '';
+}
+
+// ===== DASHBOARD =====
+async function refreshDashboard() {
+  if (!settings.userId || !settings.accessToken) {
+    showToast('先にThreadsの設定をしてくださいっちゃ！');
+    return;
+  }
+  showLoading(true, 'Threadsデータ取得中...');
+  document.getElementById('btnRefresh').disabled = true;
+  try {
+    const posts = await fetchMyPosts();
+    const postsWithMetrics = [];
+    for (let i = 0; i < posts.length; i++) {
+      showLoading(true, `インサイト取得中 (${i+1}/${posts.length})...`);
+      const insights = await fetchPostInsights(posts[i].id);
+      postsWithMetrics.push({ ...posts[i], ...insights });
+      await sb.from('threads_posts').upsert({
+        post_id: posts[i].id,
+        text: posts[i].text || '',
+        media_type: posts[i].media_type || '',
+        permalink: posts[i].permalink || '',
+        views: insights.views || 0,
+        likes: insights.likes || 0,
+        replies: insights.replies || 0,
+        reposts: insights.reposts || 0,
+        quotes: insights.quotes || 0,
+        posted_at: posts[i].timestamp,
+        fetched_at: new Date().toISOString(),
+      }, { onConflict: 'post_id' });
+    }
+    renderDashboard(postsWithMetrics);
+    showToast(`${postsWithMetrics.length}件の投稿を更新したっちゃ！`);
+    document.getElementById('dashboardAlert').innerHTML =
+      `<div class="alert alert-success">✅ ${postsWithMetrics.length}件取得完了（${new Date().toLocaleString('ja-JP')}）</div>`;
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnRefresh').disabled = false;
+  }
+}
+
+async function loadDashboardFromDB() {
+  const { data } = await sb.from('threads_posts').select('*').order('posted_at', { ascending: false }).limit(20);
+  if (data && data.length > 0) renderDashboard(data.map(d => ({
+    id: d.post_id, text: d.text, permalink: d.permalink, timestamp: d.posted_at,
+    views: d.views, likes: d.likes, replies: d.replies, reposts: d.reposts, quotes: d.quotes
+  })));
+}
+
+function renderDashboard(posts) {
+  if (!posts.length) return;
+  const totalViews = posts.reduce((s, p) => s + (p.views || 0), 0);
+  const totalLikes = posts.reduce((s, p) => s + (p.likes || 0), 0);
+  const totalEng = posts.reduce((s, p) => s + (p.likes || 0) + (p.replies || 0) + (p.reposts || 0), 0);
+  const avgViews = Math.round(totalViews / posts.length);
+  const avgLikes = Math.round(totalLikes / posts.length);
+  const engRate = totalViews > 0 ? ((totalEng / totalViews) * 100).toFixed(1) : '0.0';
+
+  document.getElementById('statPosts').textContent = posts.length;
+  document.getElementById('statViews').textContent = avgViews.toLocaleString();
+  document.getElementById('statLikes').textContent = avgLikes.toLocaleString();
+  document.getElementById('statEngagement').textContent = engRate + '%';
+
+  // Chart
+  const sorted = [...posts].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0)).slice(-10);
+  const labels = sorted.map(p => {
+    const d = new Date(p.timestamp || p.posted_at);
+    return isNaN(d) ? '?' : `${d.getMonth()+1}/${d.getDate()}`;
+  });
+  const viewData = sorted.map(p => p.views || 0);
+  const likeData = sorted.map(p => p.likes || 0);
+
+  if (postsChart) postsChart.destroy();
+  const ctx = document.getElementById('performanceChart').getContext('2d');
+  postsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '閲覧数', data: viewData, borderColor: '#d4789a', backgroundColor: 'rgba(212,120,154,0.1)', tension: 0.4, fill: true },
+        { label: 'いいね', data: likeData, borderColor: '#c9a96e', backgroundColor: 'rgba(201,169,110,0.1)', tension: 0.4, fill: true },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+
+  // Table
+  const wrap = document.getElementById('postsTableWrap');
+  wrap.innerHTML = `
+    <table class="post-table">
+      <thead><tr>
+        <th>投稿内容</th>
+        <th>👁 閲覧</th>
+        <th>❤️ いいね</th>
+        <th>💬 返信</th>
+        <th>🔁 リポスト</th>
+        <th>投稿日</th>
+      </tr></thead>
+      <tbody>
+        ${posts.map(p => {
+          const d = new Date(p.timestamp || p.posted_at);
+          const dateStr = isNaN(d) ? '-' : `${d.getMonth()+1}/${d.getDate()}`;
+          const text = (p.text || '（テキストなし）').replace(/</g, '&lt;');
+          const link = p.permalink ? `<a href="${p.permalink}" target="_blank" style="color:var(--pink);font-size:10px;">🔗</a>` : '';
+          return `<tr>
+            <td><span class="post-text-cell" title="${text}">${text}</span> ${link}</td>
+            <td>${(p.views || 0).toLocaleString()}</td>
+            <td>${(p.likes || 0).toLocaleString()}</td>
+            <td>${(p.replies || 0).toLocaleString()}</td>
+            <td>${(p.reposts || 0).toLocaleString()}</td>
+            <td style="white-space:nowrap;">${dateStr}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ===== RESEARCH =====
+function setKeyword(kw) {
+  document.getElementById('researchKeyword').value = kw;
+}
+
+async function doResearch() {
+  const keyword = document.getElementById('researchKeyword').value.trim();
+  if (!keyword) { showToast('キーワードを入力してくださいっちゃ'); return; }
+  if (!settings.accessToken) { showToast('先にThreadsの設定をしてくださいっちゃ！'); return; }
+  showLoading(true, '検索中...');
+  document.getElementById('btnResearch').disabled = true;
+  document.getElementById('researchAnalysis').style.display = 'none';
+  try {
+    const results = await searchThreads(keyword);
+    renderResearchResults(keyword, results);
+    if (results.length > 0) {
+      await sb.from('research_results').insert(results.map(r => ({
+        keyword,
+        post_id: r.id,
+        text: r.text || '',
+        username: r.username || '',
+        permalink: r.permalink || '',
+        posted_at: r.timestamp,
+        searched_at: new Date().toISOString(),
+      })));
+    }
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+    document.getElementById('researchResults').innerHTML = `<div class="alert alert-warning">⚠️ ${e.message}</div>`;
+  } finally {
+    showLoading(false);
+    document.getElementById('btnResearch').disabled = false;
+  }
+}
+
+function renderResearchResults(keyword, results) {
+  const el = document.getElementById('researchResults');
+  if (!results.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>該当する投稿が見つからんかったっちゃ</p></div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">「${keyword}」の検索結果（${results.length}件）</div>
+      <button class="btn btn-gold btn-sm" onclick="analyzeResearch('${keyword.replace(/'/g, "\\'")}')">🤖 Claude分析</button>
+    </div>
+    ${results.slice(0, 15).map(r => {
+      const text = (r.text || '（テキストなし）').replace(/</g, '&lt;');
+      const d = new Date(r.timestamp);
+      const dateStr = isNaN(d) ? '' : `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+      return `<div class="research-result">
+        <div class="research-result-text">${text}</div>
+        <div class="research-meta">
+          <span>👤 @${r.username || '不明'}</span>
+          <span>📅 ${dateStr}</span>
+          ${r.permalink ? `<a href="${r.permalink}" target="_blank" style="color:var(--pink);">🔗 リンク</a>` : ''}
+        </div>
+      </div>`;
+    }).join('')}`;
+}
+
+async function analyzeResearch(keyword) {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  showLoading(true, 'Claude分析中...');
+  try {
+    const { data } = await sb.from('research_results').select('text,username').eq('keyword', keyword).order('searched_at', { ascending: false }).limit(15);
+    const postTexts = (data || []).map((r, i) => `[${i+1}] ${r.text}`).join('\n\n');
+    const system = `あなたはSNSマーケティングの専門家です。Threadsの投稿データを分析して、バズるコンテンツのパターンを解明します。分析は簡潔で実践的に、日本語で回答してください。`;
+    const prompt = `以下は「${keyword}」で検索したThreadsの投稿です。
+
+${postTexts}
+
+以下の観点で分析してください：
+1. **バズりやすい投稿の共通パターン**（文体・構成・感情訴求など）
+2. **よく使われているテーマ・切り口**（上位3〜5つ）
+3. **エンゲージメントを高める要素**（問いかけ・共感・情報価値など）
+4. **花嫁アカウントで活用できる具体的な投稿アイデア**（3案）`;
+    const analysis = await callClaude(system, prompt);
+    document.getElementById('analysisText').textContent = analysis;
+    document.getElementById('researchAnalysis').style.display = 'block';
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ===== SUGGESTIONS =====
+function toggleTheme(el, theme) {
+  el.classList.toggle('active');
+  if (el.classList.contains('active')) {
+    selectedThemes.push(theme);
+  } else {
+    selectedThemes = selectedThemes.filter(t => t !== theme);
+  }
+}
+
+async function generateSuggestions(count) {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const note = document.getElementById('suggestNote').value.trim();
+  const themes = selectedThemes.length > 0 ? selectedThemes.join('・') : '花嫁・結婚式全般';
+  showLoading(true, 'Claude投稿提案を生成中...');
+  document.getElementById('btnSuggest').disabled = true;
+  try {
+    const { data: topPosts } = await sb.from('threads_posts').select('text,views,likes').order('views', { ascending: false }).limit(5);
+    const topPostsText = topPosts && topPosts.length > 0
+      ? '\n\n【自分のバズった投稿（参考）】\n' + topPosts.map(p => `・${p.text}（閲覧:${p.views}、いいね:${p.likes}）`).join('\n')
+      : '';
+    const system = `あなたはSNSマーケティングの専門家で、Threadsで花嫁コンテンツを発信するアカウントのコンテンツライターです。エンゲージメントが高く、プレ花嫁に刺さる投稿文を作成します。`;
+    const prompt = `以下の条件でThreads投稿を${count}本考えてください。
+
+【テーマ】${themes}
+【要望】${note || '特になし'}${topPostsText}
+
+【出力形式】
+各投稿は以下の構成で：
+---投稿${count > 1 ? 'A' : ''}---
+（本文：200〜300文字程度、改行あり、ハッシュタグ3〜5個）
+
+【条件】
+- プレ花嫁の悩み・共感・感動に寄り添う内容
+- 読んで「いいね！」と思えるような共感・情報価値
+- 自然な話し言葉でOK
+- Threads向けの短め・読みやすい文体`;
+    const result = await callClaude(system, prompt);
+    renderSuggestions(result, themes);
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnSuggest').disabled = false;
+  }
+}
+
+function renderSuggestions(text, theme) {
+  const el = document.getElementById('suggestionsList');
+  const parts = text.split(/---.*?---/).filter(p => p.trim());
+  if (parts.length === 0) parts.push(text);
+  el.innerHTML = `<div class="section-header" style="margin-bottom:8px;">
+    <div class="section-title">✨ 生成された投稿提案</div>
+  </div>` + parts.map((p, i) => `
+    <div class="suggestion-card" id="scard${i}">
+      <div class="suggestion-badge">提案${i+1}</div>
+      <div class="suggestion-text">${p.trim().replace(/\n/g, '<br>').replace(/</g, c => c === '<' ? c : c)}</div>
+      <div class="suggestion-actions">
+        <button class="btn btn-sm btn-outline" onclick="copySuggestion(${i})">📋 コピー</button>
+        <button class="btn btn-sm btn-primary" onclick="saveSuggestion(${i}, '${theme.replace(/'/g, "\\'")}')">💾 保存</button>
+      </div>
+    </div>`).join('');
+  window._currentSuggestions = parts;
+}
+
+async function saveSuggestion(idx, theme) {
+  const text = window._currentSuggestions?.[idx];
+  if (!text) return;
+  await sb.from('post_suggestions').insert({ suggestion_text: text, theme, based_on: 'generated', used: false });
+  showToast('保存したっちゃ！');
+  loadSavedSuggestions();
+}
+
+function copySuggestion(idx) {
+  const text = window._currentSuggestions?.[idx];
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => showToast('コピーしたっちゃ！'));
+}
+
+async function loadSavedSuggestions() {
+  const { data } = await sb.from('post_suggestions').select('*').order('created_at', { ascending: false }).limit(20);
+  if (!data || data.length === 0) return;
+  document.getElementById('savedSuggestionsCard').style.display = 'block';
+  document.getElementById('savedSuggestionsList').innerHTML = data.map(s => `
+    <div class="suggestion-card ${s.used ? 'used' : ''}" id="saved${s.id}">
+      ${s.used ? '<div class="suggestion-badge">使用済み</div>' : ''}
+      <div style="font-size:10px;color:var(--gray);margin-bottom:6px;">🏷️ ${s.theme || '-'} | ${new Date(s.created_at).toLocaleDateString('ja-JP')}</div>
+      <div class="suggestion-text">${(s.suggestion_text || '').replace(/\n/g, '<br>').replace(/</g, '&lt;')}</div>
+      <div class="suggestion-actions">
+        <button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(${JSON.stringify(s.suggestion_text)}).then(()=>showToast('コピーしたっちゃ！'))">📋 コピー</button>
+        ${!s.used ? `<button class="btn btn-sm btn-gold" onclick="markUsed('${s.id}')">✅ 使用済みにする</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function markUsed(id) {
+  await sb.from('post_suggestions').update({ used: true }).eq('id', id);
+  showToast('使用済みにしたっちゃ！');
+  loadSavedSuggestions();
+}
+
+// ===== UI HELPERS =====
+function showLoading(show, msg) {
+  const el = document.getElementById('loadingOverlay');
+  el.classList.toggle('show', show);
+  if (msg) document.getElementById('loadingMsg').textContent = msg;
+}
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
