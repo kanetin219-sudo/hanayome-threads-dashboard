@@ -710,10 +710,19 @@ let postsChart = null;
 let selectedThemes = [];
 
 // ===== INIT =====
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   settings = loadSettings();
   fillSettingsForm();
   updateHeaderStatus();
+
+  // localStorageが空ならSupabaseから復元
+  if (!settings.userId || !settings.accessToken) {
+    const restored = await loadSettingsFromSupabase();
+    if (restored) {
+      showToast('設定をSupabaseから復元したっちゃ！');
+    }
+  }
+
   loadDashboardFromDB();
   loadSavedSuggestions();
   if (!settings.userId || !settings.accessToken) {
@@ -740,16 +749,39 @@ function fillSettingsForm() {
   document.getElementById('settingToken').value = settings.accessToken || '';
   document.getElementById('settingClaudeKey').value = settings.claudeKey || '';
 }
-function saveSettings() {
+async function saveSettings() {
   settings = {
     userId: document.getElementById('settingUserId').value.trim(),
     accessToken: document.getElementById('settingToken').value.trim(),
     claudeKey: document.getElementById('settingClaudeKey').value.trim(),
   };
+  // localStorageとSupabaseの両方に保存
   localStorage.setItem('hanayome_settings', JSON.stringify(settings));
+  await sb.from('app_settings').upsert({
+    id: 'default',
+    user_id: settings.userId,
+    access_token: settings.accessToken,
+    claude_key: settings.claudeKey,
+    updated_at: new Date().toISOString(),
+  });
   updateHeaderStatus();
-  showToast('設定を保存したっちゃ！');
+  showToast('設定を保存したっちゃ！（Supabaseにも保存済み）');
   document.getElementById('dashboardAlert').innerHTML = '';
+}
+async function loadSettingsFromSupabase() {
+  const { data } = await sb.from('app_settings').select('*').eq('id', 'default').single();
+  if (data && (data.user_id || data.access_token)) {
+    settings = {
+      userId: data.user_id || '',
+      accessToken: data.access_token || '',
+      claudeKey: data.claude_key || '',
+    };
+    localStorage.setItem('hanayome_settings', JSON.stringify(settings));
+    fillSettingsForm();
+    updateHeaderStatus();
+    return true;
+  }
+  return false;
 }
 function updateHeaderStatus() {
   const el = document.getElementById('headerStatus');
