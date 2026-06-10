@@ -887,30 +887,49 @@ async function refreshDashboard() {
   document.getElementById('btnRefresh').disabled = true;
   try {
     const posts = await fetchMyPosts();
-    showToast(`${posts.length}件の投稿を発見したっちゃ！インサイト取得中...`);
-    const postsWithMetrics = [];
-    for (let i = 0; i < posts.length; i++) {
-      showLoading(true, `インサイト取得中 (${i+1}/${posts.length})...`);
-      const insights = await fetchPostInsights(posts[i].id);
-      postsWithMetrics.push({ ...posts[i], ...insights });
+    showToast(`${posts.length}件の投稿を発見したっちゃ！`);
+
+    // Supabaseに既存のpost_idを取得（新規のみインサイトを取得）
+    const { data: existingPosts } = await sb.from('threads_posts').select('post_id, views, likes, replies, reposts, quotes, text, permalink, posted_at');
+    const existingMap = {};
+    (existingPosts || []).forEach(p => { existingMap[p.post_id] = p; });
+
+    const newPosts = posts.filter(p => !existingMap[p.id]);
+    const allPostsWithMetrics = [];
+
+    // 既存投稿はSupabaseのデータを使う
+    posts.forEach(p => {
+      if (existingMap[p.id]) {
+        const e = existingMap[p.id];
+        allPostsWithMetrics.push({ ...p, views: e.views, likes: e.likes, replies: e.replies, reposts: e.reposts, quotes: e.quotes });
+      }
+    });
+
+    // 新規投稿のみAPIからインサイト取得
+    showToast(`新規${newPosts.length}件のインサイトを取得するっちゃ...`);
+    for (let i = 0; i < newPosts.length; i++) {
+      showLoading(true, `新規投稿インサイト取得中 (${i+1}/${newPosts.length})...`);
+      const insights = await fetchPostInsights(newPosts[i].id);
+      allPostsWithMetrics.push({ ...newPosts[i], ...insights });
       await sb.from('threads_posts').upsert({
-        post_id: posts[i].id,
-        text: posts[i].text || '',
-        media_type: posts[i].media_type || '',
-        permalink: posts[i].permalink || '',
+        post_id: newPosts[i].id,
+        text: newPosts[i].text || '',
+        media_type: newPosts[i].media_type || '',
+        permalink: newPosts[i].permalink || '',
         views: insights.views || 0,
         likes: insights.likes || 0,
         replies: insights.replies || 0,
         reposts: insights.reposts || 0,
         quotes: insights.quotes || 0,
-        posted_at: posts[i].timestamp,
+        posted_at: newPosts[i].timestamp,
         fetched_at: new Date().toISOString(),
       }, { onConflict: 'post_id' });
     }
-    renderDashboard(postsWithMetrics);
-    showToast(`${postsWithMetrics.length}件の投稿を更新したっちゃ！`);
+
+    renderDashboard(allPostsWithMetrics);
+    showToast(`✅ 全${allPostsWithMetrics.length}件表示（新規${newPosts.length}件取得）`);
     document.getElementById('dashboardAlert').innerHTML =
-      `<div class="alert alert-success">✅ ${postsWithMetrics.length}件取得完了（${new Date().toLocaleString('ja-JP')}）</div>`;
+      `<div class="alert alert-success">✅ 全${allPostsWithMetrics.length}件（新規${newPosts.length}件追加）${new Date().toLocaleString('ja-JP')}</div>`;
   } catch (e) {
     showToast('エラー: ' + e.message);
   } finally {
