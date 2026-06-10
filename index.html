@@ -805,8 +805,9 @@ async function fetchMyPosts() {
   let allPosts = [];
   let after = null;
   let page = 1;
+  const MAX_PAGES = 20; // 最大2000件
 
-  while (true) {
+  while (page <= MAX_PAGES) {
     const params = {
       fields: 'id,text,media_type,permalink,timestamp',
       limit: '100'
@@ -816,18 +817,28 @@ async function fetchMyPosts() {
     showLoading(true, `投稿データ取得中... ${allPosts.length}件（${page}ページ目）`);
     const data = await threadsCall(`/${settings.userId}/threads`, params);
     const posts = data.data || [];
+
+    if (posts.length === 0) break;
     allPosts = allPosts.concat(posts);
 
-    // 次のページがあるか確認
-    const nextAfter = data.paging?.cursors?.after;
-    const hasNext = data.paging?.next && nextAfter && nextAfter !== after;
-    if (!hasNext || posts.length === 0) break;
+    // afterカーソルがあれば次のページへ
+    const nextCursor = data.paging?.cursors?.after || data.paging?.next;
+    if (!nextCursor || nextCursor === after) break;
 
-    after = nextAfter;
+    // paging.nextがフルURLの場合はafterパラメータを抜き出す
+    if (nextCursor.startsWith('http')) {
+      try {
+        const url = new URL(nextCursor);
+        after = url.searchParams.get('after');
+      } catch {
+        break;
+      }
+    } else {
+      after = nextCursor;
+    }
+
+    if (!after) break;
     page++;
-
-    // 安全のため最大10ページ（1000件）まで
-    if (page > 10) break;
   }
 
   return allPosts;
