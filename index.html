@@ -802,11 +802,35 @@ async function threadsCall(endpoint, params = {}) {
 }
 
 async function fetchMyPosts() {
-  const data = await threadsCall(`/${settings.userId}/threads`, {
-    fields: 'id,text,media_type,permalink,timestamp',
-    limit: '20'
-  });
-  return data.data || [];
+  let allPosts = [];
+  let after = null;
+  let page = 1;
+
+  while (true) {
+    const params = {
+      fields: 'id,text,media_type,permalink,timestamp',
+      limit: '100'
+    };
+    if (after) params.after = after;
+
+    showLoading(true, `投稿データ取得中... ${allPosts.length}件（${page}ページ目）`);
+    const data = await threadsCall(`/${settings.userId}/threads`, params);
+    const posts = data.data || [];
+    allPosts = allPosts.concat(posts);
+
+    // 次のページがあるか確認
+    const nextAfter = data.paging?.cursors?.after;
+    const hasNext = data.paging?.next && nextAfter && nextAfter !== after;
+    if (!hasNext || posts.length === 0) break;
+
+    after = nextAfter;
+    page++;
+
+    // 安全のため最大10ページ（1000件）まで
+    if (page > 10) break;
+  }
+
+  return allPosts;
 }
 
 async function fetchPostInsights(postId) {
@@ -852,6 +876,7 @@ async function refreshDashboard() {
   document.getElementById('btnRefresh').disabled = true;
   try {
     const posts = await fetchMyPosts();
+    showToast(`${posts.length}件の投稿を発見したっちゃ！インサイト取得中...`);
     const postsWithMetrics = [];
     for (let i = 0; i < posts.length; i++) {
       showLoading(true, `インサイト取得中 (${i+1}/${posts.length})...`);
@@ -884,7 +909,7 @@ async function refreshDashboard() {
 }
 
 async function loadDashboardFromDB() {
-  const { data } = await sb.from('threads_posts').select('*').order('posted_at', { ascending: false }).limit(20);
+  const { data } = await sb.from('threads_posts').select('*').order('posted_at', { ascending: false });
   if (data && data.length > 0) renderDashboard(data.map(d => ({
     id: d.post_id, text: d.text, permalink: d.permalink, timestamp: d.posted_at,
     views: d.views, likes: d.likes, replies: d.replies, reposts: d.reposts, quotes: d.quotes
@@ -905,14 +930,15 @@ function renderDashboard(posts) {
   document.getElementById('statLikes').textContent = avgLikes.toLocaleString();
   document.getElementById('statEngagement').textContent = engRate + '%';
 
-  // Chart
-  const sorted = [...posts].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0)).slice(-10);
-  const labels = sorted.map(p => {
+  // Chart（全件を日付順・直近30件を表示）
+  const sorted = [...posts].sort((a, b) => new Date(a.timestamp || a.posted_at || 0) - new Date(b.timestamp || b.posted_at || 0));
+  const chartData = sorted.slice(-30); // 直近30件をグラフ表示
+  const labels = chartData.map(p => {
     const d = new Date(p.timestamp || p.posted_at);
     return isNaN(d) ? '?' : `${d.getMonth()+1}/${d.getDate()}`;
   });
-  const viewData = sorted.map(p => p.views || 0);
-  const likeData = sorted.map(p => p.likes || 0);
+  const viewData = chartData.map(p => p.views || 0);
+  const likeData = chartData.map(p => p.likes || 0);
 
   if (postsChart) postsChart.destroy();
   const ctx = document.getElementById('performanceChart').getContext('2d');
