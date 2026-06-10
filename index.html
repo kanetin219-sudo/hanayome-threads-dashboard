@@ -507,13 +507,17 @@
 
   <!-- TOP投稿ランキング -->
   <div class="card" id="rankingCard" style="display:none;">
-    <div class="card-title">🏆 TOP投稿ランキング</div>
-    <div class="theme-chips" style="margin-bottom:10px;">
+    <div class="section-header">
+      <div class="card-title" style="margin-bottom:0;">🏆 TOP投稿ランキング</div>
+      <button class="btn btn-gold btn-sm" onclick="generateFromTop5()" id="btnTop5Generate">✨ TOP5から一括生成</button>
+    </div>
+    <div class="theme-chips" style="margin:10px 0;">
       <button class="theme-chip active" onclick="showRanking('views',this)">👁 閲覧数</button>
       <button class="theme-chip" onclick="showRanking('likes',this)">❤️ いいね</button>
       <button class="theme-chip" onclick="showRanking('eng',this)">⚡ エンゲージメント率</button>
     </div>
     <div id="rankingList"></div>
+    <div id="rankingGeneratedPosts" style="margin-top:12px;"></div>
   </div>
 
   <!-- 勝ちパターン分析 -->
@@ -1209,20 +1213,22 @@ function renderTopRanking(posts, type) {
     return 0;
   }).slice(0, 10);
 
+  window._currentRankingPosts = sorted;
   const medals = ['🥇','🥈','🥉','4','5','6','7','8','9','10'];
   document.getElementById('rankingList').innerHTML = sorted.map((p, i) => {
     const d = new Date(p.timestamp || p.posted_at);
     const dateStr = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}`;
     const text = (p.text || '（テキストなし）').replace(/</g,'&lt;');
+    const textEsc = JSON.stringify(p.text || '').slice(1,-1);
     const engRate = (p.views||0) > 0 ? (((p.likes||0)+(p.replies||0)+(p.reposts||0))/(p.views||1)*100).toFixed(1) : '0.0';
     const mainVal = type === 'views' ? `👁 ${(p.views||0).toLocaleString()}` :
                     type === 'likes' ? `❤️ ${(p.likes||0).toLocaleString()}` :
                     `⚡ ${engRate}%`;
-    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--pink-light);align-items:flex-start;">
+    return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--pink-light);align-items:flex-start;">
       <span style="font-size:20px;min-width:28px;">${medals[i]}</span>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;line-height:1.5;margin-bottom:4px;">${text.slice(0,80)}${text.length>80?'…':''} ${p.permalink?`<a href="${p.permalink}" target="_blank" style="color:var(--pink);">🔗</a>`:''}</div>
-        <div style="font-size:10px;color:var(--gray);display:flex;gap:10px;flex-wrap:wrap;">
+        <div style="font-size:12px;line-height:1.5;margin-bottom:6px;">${text.slice(0,100)}${text.length>100?'…':''} ${p.permalink?`<a href="${p.permalink}" target="_blank" style="color:var(--pink);">🔗</a>`:''}</div>
+        <div style="font-size:10px;color:var(--gray);display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
           <span style="color:var(--pink);font-weight:bold;">${mainVal}</span>
           <span>👁 ${(p.views||0).toLocaleString()}</span>
           <span>❤️ ${(p.likes||0).toLocaleString()}</span>
@@ -1230,9 +1236,126 @@ function renderTopRanking(posts, type) {
           <span>📅 ${dateStr}</span>
           <span>📝 ${(p.text||'').length}文字</span>
         </div>
+        <button class="btn btn-sm btn-outline" onclick="generateSimilarPost(${i})" style="font-size:10px;padding:3px 10px;">✨ この投稿ベースで生成</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ===== ランキング投稿から類似生成 =====
+async function generateSimilarPost(rankIdx) {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const posts = window._currentRankingPosts || [];
+  const post = posts[rankIdx];
+  if (!post) return;
+
+  showLoading(true, 'この投稿ベースで新しい投稿を生成中...');
+  try {
+    const system = `あなたは花嫁・ウェディング系Threadsアカウントのコンテンツライターです。バズった投稿を参考に、同じエッセンスを持ちながら新鮮な内容の投稿を作成します。`;
+    const prompt = `以下のバズった投稿（閲覧:${post.views} いいね:${post.likes}）を参考に、同じエッセンス・トーン・構成を持つ新しい投稿を3本作ってください。
+
+【参考投稿】
+${post.text}
+
+【条件】
+- 同じ感情訴求・構成パターンを使う
+- 内容は完全に新しいもの（コピーNG）
+- 文字数は参考投稿と同程度
+- ハッシュタグあり
+- プレ花嫁に刺さる内容
+
+---投稿A---
+（本文）
+
+---投稿B---
+（本文）
+
+---投稿C---
+（本文）`;
+
+    const result = await callClaude(system, prompt);
+    const parts = result.split(/---投稿[A-Z]---/).filter(p => p.trim());
+
+    const el = document.getElementById('rankingGeneratedPosts');
+    const newCards = parts.map((text, i) => {
+      const t = text.trim();
+      return `<div class="suggestion-card">
+        <div class="suggestion-badge" style="background:var(--pink-light);color:var(--pink);">ランク${rankIdx+1}ベース</div>
+        <div style="font-size:10px;color:var(--gray);margin-bottom:6px;">参考: 閲覧${(post.views||0).toLocaleString()} / いいね${post.likes||0}</div>
+        <div class="suggestion-text">${t.replace(/\n/g,'<br>').replace(/</g,'&lt;').replace(/&lt;br&gt;/g,'<br>')}</div>
+        <div class="suggestion-actions">
+          <button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(${JSON.stringify(t)}).then(()=>showToast('コピーしたっちゃ！'))">📋 コピー</button>
+          <button class="btn btn-sm btn-primary" onclick="saveGeneratedPost(${JSON.stringify(t).replace(/'/g, '&#39;')}, 'ランキングベース生成')">💾 保存</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `<div style="margin-top:4px;padding:8px 0;font-size:12px;font-weight:bold;color:var(--pink);">✨ 生成された類似投稿</div>` + newCards;
+    el.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function generateFromTop5() {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const posts = window._currentRankingPosts || [];
+  if (!posts.length) { showToast('先にデータ更新してくださいっちゃ！'); return; }
+
+  showLoading(true, 'TOP5投稿を分析して一括生成中...');
+  document.getElementById('btnTop5Generate').disabled = true;
+  try {
+    const top5 = posts.slice(0, 5);
+    const top5Text = top5.map((p, i) =>
+      `【${i+1}位 閲覧:${p.views} いいね:${p.likes}】\n${p.text}`
+    ).join('\n\n');
+
+    const system = `あなたは花嫁・ウェディング系Threadsアカウントのコンテンツライターです。`;
+    const prompt = `以下のバズったTOP5投稿を分析して、共通のバズパターンを抽出し、そのパターンを使った新しい投稿を5本作ってください。
+
+${top5Text}
+
+【出力形式】
+まず「## バズパターン分析」としてTOP5の共通要素を2〜3行で説明。
+その後、---投稿1--- から ---投稿5--- の形式で5本の新しい投稿文を作成。
+各投稿はバズパターンを意識した内容・構成にすること。ハッシュタグ付き。`;
+
+    const result = await callClaude(system, prompt);
+
+    // パターン分析部分と投稿を分離
+    const analysisMatch = result.match(/## バズパターン分析([\s\S]*?)(?=---投稿1---|$)/);
+    const analysis = analysisMatch ? analysisMatch[1].trim() : '';
+    const parts = result.split(/---投稿\d+---/).filter(p => p.trim() && !p.includes('バズパターン'));
+
+    const el = document.getElementById('rankingGeneratedPosts');
+    const analysisHtml = analysis ? `<div class="analysis-box" style="margin-bottom:12px;"><strong>📊 バズパターン分析</strong><br><br>${analysis.replace(/\n/g,'<br>')}</div>` : '';
+    const newCards = parts.map((text, i) => {
+      const t = text.trim();
+      return `<div class="suggestion-card">
+        <div class="suggestion-badge" style="background:var(--gold-light);color:var(--gold);">TOP5ベース ${i+1}</div>
+        <div class="suggestion-text">${t.replace(/\n/g,'<br>').replace(/</g,'&lt;').replace(/&lt;br&gt;/g,'<br>')}</div>
+        <div class="suggestion-actions">
+          <button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(${JSON.stringify(t)}).then(()=>showToast('コピーしたっちゃ！'))">📋 コピー</button>
+          <button class="btn btn-sm btn-primary" onclick="saveGeneratedPost(${JSON.stringify(t).replace(/'/g,'&#39;')}, 'TOP5ベース生成')">💾 保存</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `<div style="padding:8px 0;font-size:12px;font-weight:bold;color:var(--gold);">✨ TOP5バズパターンから生成</div>${analysisHtml}${newCards}`;
+    el.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnTop5Generate').disabled = false;
+  }
+}
+
+async function saveGeneratedPost(text, theme) {
+  await sb.from('post_suggestions').insert({ suggestion_text: text, theme, based_on: 'ranking', used: false });
+  showToast('投稿提案タブに保存したっちゃ！');
 }
 
 // ===== 勝ちパターン分析 =====
