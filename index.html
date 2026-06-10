@@ -715,13 +715,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   fillSettingsForm();
   updateHeaderStatus();
 
-  // localStorageが空ならSupabaseから復元
-  if (!settings.userId || !settings.accessToken) {
-    const restored = await loadSettingsFromSupabase();
-    if (restored) {
-      showToast('設定をSupabaseから復元したっちゃ！');
-    }
-  }
+  // 常にSupabaseから最新設定を読み込んでマージ（トークンが変わっても自動反映）
+  await loadSettingsFromSupabase();
 
   loadDashboardFromDB();
   loadSavedSuggestions();
@@ -770,12 +765,11 @@ async function saveSettings() {
 }
 async function loadSettingsFromSupabase() {
   const { data } = await sb.from('app_settings').select('*').eq('id', 'default').single();
-  if (data && (data.user_id || data.access_token)) {
-    settings = {
-      userId: data.user_id || '',
-      accessToken: data.access_token || '',
-      claudeKey: data.claude_key || '',
-    };
+  if (data) {
+    // Supabaseの値で上書き（空でない項目のみ）
+    if (data.user_id) settings.userId = data.user_id;
+    if (data.access_token) settings.accessToken = data.access_token;
+    if (data.claude_key) settings.claudeKey = data.claude_key;
     localStorage.setItem('hanayome_settings', JSON.stringify(settings));
     fillSettingsForm();
     updateHeaderStatus();
