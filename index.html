@@ -505,6 +505,40 @@
     <canvas id="performanceChart" height="80"></canvas>
   </div>
 
+  <!-- TOP投稿ランキング -->
+  <div class="card" id="rankingCard" style="display:none;">
+    <div class="card-title">🏆 TOP投稿ランキング</div>
+    <div class="theme-chips" style="margin-bottom:10px;">
+      <button class="theme-chip active" onclick="showRanking('views',this)">👁 閲覧数</button>
+      <button class="theme-chip" onclick="showRanking('likes',this)">❤️ いいね</button>
+      <button class="theme-chip" onclick="showRanking('eng',this)">⚡ エンゲージメント率</button>
+    </div>
+    <div id="rankingList"></div>
+  </div>
+
+  <!-- 勝ちパターン分析 -->
+  <div class="card" id="patternCard" style="display:none;">
+    <div class="section-header">
+      <div class="section-title">📊 勝ちパターン分析</div>
+      <button class="btn btn-gold btn-sm" onclick="analyzeOwnPosts()" id="btnOwnAnalysis">🤖 Claude分析</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <div class="card-title" style="font-size:11px;">📅 曜日別 平均閲覧数</div>
+        <canvas id="dayChart" height="140"></canvas>
+      </div>
+      <div>
+        <div class="card-title" style="font-size:11px;">📝 文字数別 平均閲覧数</div>
+        <canvas id="lengthChart" height="140"></canvas>
+      </div>
+    </div>
+    <div>
+      <div class="card-title" style="font-size:11px;">🕐 時間帯別 平均閲覧数（JST）</div>
+      <canvas id="hourChart" height="80"></canvas>
+    </div>
+    <div id="ownAnalysisResult" style="display:none;margin-top:12px;"></div>
+  </div>
+
   <div class="card">
     <div class="card-title">📝 投稿一覧</div>
     <div class="post-table-wrap" id="postsTableWrap">
@@ -988,6 +1022,13 @@ function renderDashboard(posts) {
     }
   });
 
+  // ランキング・パターン分析を描画
+  window._dashboardPosts = posts;
+  renderTopRanking(posts, 'views');
+  renderPatternCharts(posts);
+  document.getElementById('rankingCard').style.display = 'block';
+  document.getElementById('patternCard').style.display = 'block';
+
   // Table
   const wrap = document.getElementById('postsTableWrap');
   wrap.innerHTML = `
@@ -1144,6 +1185,191 @@ async function analyzeManualPosts() {
   } finally {
     showLoading(false);
     document.getElementById('btnManual').disabled = false;
+  }
+}
+
+// ===== TOP投稿ランキング =====
+let dayChart = null, lengthChart = null, hourChart = null;
+
+function showRanking(type, el) {
+  document.querySelectorAll('#rankingCard .theme-chip').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderTopRanking(window._dashboardPosts || [], type);
+}
+
+function renderTopRanking(posts, type) {
+  const sorted = [...posts].sort((a, b) => {
+    if (type === 'views') return (b.views||0) - (a.views||0);
+    if (type === 'likes') return (b.likes||0) - (a.likes||0);
+    if (type === 'eng') {
+      const eA = (a.views||0) > 0 ? ((a.likes||0)+(a.replies||0)+(a.reposts||0))/(a.views||1)*100 : 0;
+      const eB = (b.views||0) > 0 ? ((b.likes||0)+(b.replies||0)+(b.reposts||0))/(b.views||1)*100 : 0;
+      return eB - eA;
+    }
+    return 0;
+  }).slice(0, 10);
+
+  const medals = ['🥇','🥈','🥉','4','5','6','7','8','9','10'];
+  document.getElementById('rankingList').innerHTML = sorted.map((p, i) => {
+    const d = new Date(p.timestamp || p.posted_at);
+    const dateStr = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}`;
+    const text = (p.text || '（テキストなし）').replace(/</g,'&lt;');
+    const engRate = (p.views||0) > 0 ? (((p.likes||0)+(p.replies||0)+(p.reposts||0))/(p.views||1)*100).toFixed(1) : '0.0';
+    const mainVal = type === 'views' ? `👁 ${(p.views||0).toLocaleString()}` :
+                    type === 'likes' ? `❤️ ${(p.likes||0).toLocaleString()}` :
+                    `⚡ ${engRate}%`;
+    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--pink-light);align-items:flex-start;">
+      <span style="font-size:20px;min-width:28px;">${medals[i]}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;line-height:1.5;margin-bottom:4px;">${text.slice(0,80)}${text.length>80?'…':''} ${p.permalink?`<a href="${p.permalink}" target="_blank" style="color:var(--pink);">🔗</a>`:''}</div>
+        <div style="font-size:10px;color:var(--gray);display:flex;gap:10px;flex-wrap:wrap;">
+          <span style="color:var(--pink);font-weight:bold;">${mainVal}</span>
+          <span>👁 ${(p.views||0).toLocaleString()}</span>
+          <span>❤️ ${(p.likes||0).toLocaleString()}</span>
+          <span>💬 ${(p.replies||0)}</span>
+          <span>📅 ${dateStr}</span>
+          <span>📝 ${(p.text||'').length}文字</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== 勝ちパターン分析 =====
+function renderPatternCharts(posts) {
+  const validPosts = posts.filter(p => (p.views || 0) > 0);
+  if (!validPosts.length) return;
+
+  // 曜日別
+  const days = ['日','月','火','水','木','金','土'];
+  const dayBuckets = days.map(() => ({ sum: 0, count: 0 }));
+  validPosts.forEach(p => {
+    const d = new Date(p.timestamp || p.posted_at);
+    if (!isNaN(d)) {
+      dayBuckets[d.getDay()].sum += p.views || 0;
+      dayBuckets[d.getDay()].count++;
+    }
+  });
+  const dayAvg = dayBuckets.map(b => b.count > 0 ? Math.round(b.sum / b.count) : 0);
+  const maxDayIdx = dayAvg.indexOf(Math.max(...dayAvg));
+  const dayColors = dayAvg.map((v, i) => i === maxDayIdx ? '#d4789a' : 'rgba(212,120,154,0.4)');
+
+  if (dayChart) dayChart.destroy();
+  dayChart = new Chart(document.getElementById('dayChart'), {
+    type: 'bar',
+    data: { labels: days, datasets: [{ label: '平均閲覧数', data: dayAvg, backgroundColor: dayColors, borderRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // 文字数別
+  const lenBuckets = { '〜50文字': { sum: 0, cnt: 0 }, '51〜150文字': { sum: 0, cnt: 0 }, '151〜300文字': { sum: 0, cnt: 0 }, '300文字〜': { sum: 0, cnt: 0 } };
+  validPosts.forEach(p => {
+    const len = (p.text || '').length;
+    const key = len <= 50 ? '〜50文字' : len <= 150 ? '51〜150文字' : len <= 300 ? '151〜300文字' : '300文字〜';
+    lenBuckets[key].sum += p.views || 0;
+    lenBuckets[key].cnt++;
+  });
+  const lenLabels = Object.keys(lenBuckets);
+  const lenAvg = lenLabels.map(k => lenBuckets[k].cnt > 0 ? Math.round(lenBuckets[k].sum / lenBuckets[k].cnt) : 0);
+  const maxLenIdx = lenAvg.indexOf(Math.max(...lenAvg));
+  const lenColors = lenAvg.map((v, i) => i === maxLenIdx ? '#c9a96e' : 'rgba(201,169,110,0.4)');
+
+  if (lengthChart) lengthChart.destroy();
+  lengthChart = new Chart(document.getElementById('lengthChart'), {
+    type: 'bar',
+    data: { labels: lenLabels, datasets: [{ label: '平均閲覧数', data: lenAvg, backgroundColor: lenColors, borderRadius: 4 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // 時間帯別（JST）
+  const hourBuckets = Array.from({length: 24}, () => ({ sum: 0, cnt: 0 }));
+  validPosts.forEach(p => {
+    const d = new Date(p.timestamp || p.posted_at);
+    if (!isNaN(d)) {
+      const jstHour = (d.getUTCHours() + 9) % 24;
+      hourBuckets[jstHour].sum += p.views || 0;
+      hourBuckets[jstHour].cnt++;
+    }
+  });
+  const hourAvg = hourBuckets.map(b => b.cnt > 0 ? Math.round(b.sum / b.cnt) : 0);
+  const maxHourIdx = hourAvg.indexOf(Math.max(...hourAvg));
+
+  if (hourChart) hourChart.destroy();
+  hourChart = new Chart(document.getElementById('hourChart'), {
+    type: 'bar',
+    data: {
+      labels: Array.from({length: 24}, (_, i) => `${i}時`),
+      datasets: [{ label: '平均閲覧数', data: hourAvg, backgroundColor: hourAvg.map((v, i) => i === maxHourIdx ? '#d4789a' : 'rgba(212,120,154,0.3)'), borderRadius: 3 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+// ===== 自分の投稿AI分析 =====
+async function analyzeOwnPosts() {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const posts = window._dashboardPosts || [];
+  if (!posts.length) { showToast('先にデータ更新してくださいっちゃ！'); return; }
+
+  showLoading(true, 'Claude が自分の投稿パターンを分析中...');
+  document.getElementById('btnOwnAnalysis').disabled = true;
+  try {
+    // TOP10とWORST5を分析
+    const sorted = [...posts].filter(p => p.views > 0).sort((a, b) => (b.views||0) - (a.views||0));
+    const top10 = sorted.slice(0, 10);
+    const worst5 = sorted.slice(-5);
+    const totalAvgViews = Math.round(posts.reduce((s,p)=>s+(p.views||0),0)/posts.length);
+    const totalAvgLikes = Math.round(posts.reduce((s,p)=>s+(p.likes||0),0)/posts.length);
+
+    const top10Text = top10.map((p,i) => `[バズ${i+1}] 閲覧:${p.views} いいね:${p.likes} 文字:${(p.text||'').length}字\n${(p.text||'').slice(0,100)}`).join('\n\n');
+    const worst5Text = worst5.map((p,i) => `[低${i+1}] 閲覧:${p.views} いいね:${p.likes}\n${(p.text||'').slice(0,60)}`).join('\n\n');
+
+    const system = `あなたはSNSマーケティングの専門家です。花嫁・ウェディング系Threadsアカウントのデータを分析し、伸びる投稿の法則を発見します。`;
+    const prompt = `以下は私のThreadsアカウントのデータです（全${posts.length}件、平均閲覧${totalAvgViews}、平均いいね${totalAvgLikes}）。
+
+【バズった投稿 TOP10】
+${top10Text}
+
+【伸びなかった投稿 WORST5（参考）】
+${worst5Text}
+
+以下の形式で分析してください：
+
+## 🔥 私のバズる法則 TOP3
+（具体的な投稿内容・文体・パターンから法則を抽出）
+
+## 📊 数字で見る私の特徴
+- 最も伸びる文字数：
+- 最も伸びやすい内容のトーン：
+- バズ投稿と低迷投稿の違い：
+
+## ⚡ 今すぐ使える改善点（3つ）
+1.
+2.
+3.
+
+## 📝 次に投稿すべき内容（具体的に3案）
+1.
+2.
+3.`;
+
+    const result = await callClaude(system, prompt);
+    const sections = result.split('\n## ').filter(s => s.trim());
+    const cards = sections.map(s => {
+      const lines = s.split('\n');
+      const title = lines[0].replace(/^#+ /, '');
+      const body = lines.slice(1).join('\n').trim();
+      return `<div class="analysis-card"><div class="analysis-card-title">${title}</div><div class="analysis-card-body">${body.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div></div>`;
+    }).join('');
+
+    document.getElementById('ownAnalysisResult').innerHTML = cards;
+    document.getElementById('ownAnalysisResult').style.display = 'block';
+    document.getElementById('ownAnalysisResult').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnOwnAnalysis').disabled = false;
   }
 }
 
