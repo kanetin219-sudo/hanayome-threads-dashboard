@@ -509,13 +509,18 @@
   <div class="card" id="rankingCard" style="display:none;">
     <div class="section-header">
       <div class="card-title" style="margin-bottom:0;">🏆 TOP投稿ランキング</div>
-      <button class="btn btn-gold btn-sm" onclick="generateFromTop5()" id="btnTop5Generate">✨ TOP5から一括生成</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick="analyzeWhyTop()" id="btnWhyTop">🔍 なぜバズったか分析</button>
+        <button class="btn btn-gold btn-sm" onclick="generateFromTop5()" id="btnTop5Generate">✨ TOP5から一括生成</button>
+      </div>
     </div>
     <div class="theme-chips" style="margin:10px 0;">
       <button class="theme-chip active" onclick="showRanking('views',this)">👁 閲覧数</button>
       <button class="theme-chip" onclick="showRanking('likes',this)">❤️ いいね</button>
       <button class="theme-chip" onclick="showRanking('eng',this)">⚡ エンゲージメント率</button>
+      <button class="theme-chip" onclick="showRanking('views',this,'30')">TOP30</button>
     </div>
+    <div id="whyTopAnalysis" style="display:none;margin-bottom:10px;"></div>
     <div id="rankingList"></div>
     <div id="rankingGeneratedPosts" style="margin-top:12px;"></div>
   </div>
@@ -736,6 +741,7 @@
 
 <script>
 const SUPABASE_URL = 'https://voutbjsdhsxjedddaqll.supabase.co';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwInZI5a_rS9E2JH-RzQb2-8P95Kg5eW3QeoKPcRJ60lsPmTdWCzS_FyJVZwEPFy2Y/exec';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvdXRianNkaHN4amVkZGRhcWxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NjQwMDksImV4cCI6MjA5NjU0MDAwOX0.NxjKLpjojfBzl-978SwqepT6v4IJwz0KP82TBerIcdo';
 const EDGE_URL = `${SUPABASE_URL}/functions/v1/claude-proxy`;
 const THREADS_BASE = 'https://graph.threads.net/v1.0';
@@ -1195,13 +1201,13 @@ async function analyzeManualPosts() {
 // ===== TOP投稿ランキング =====
 let dayChart = null, lengthChart = null, hourChart = null;
 
-function showRanking(type, el) {
+function showRanking(type, el, limit) {
   document.querySelectorAll('#rankingCard .theme-chip').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  renderTopRanking(window._dashboardPosts || [], type);
+  renderTopRanking(window._dashboardPosts || [], type, limit ? parseInt(limit) : 10);
 }
 
-function renderTopRanking(posts, type) {
+function renderTopRanking(posts, type, limit = 10) {
   const sorted = [...posts].sort((a, b) => {
     if (type === 'views') return (b.views||0) - (a.views||0);
     if (type === 'likes') return (b.likes||0) - (a.likes||0);
@@ -1211,10 +1217,11 @@ function renderTopRanking(posts, type) {
       return eB - eA;
     }
     return 0;
-  }).slice(0, 10);
+  }).slice(0, limit);
 
   window._currentRankingPosts = sorted;
-  const medals = ['🥇','🥈','🥉','4','5','6','7','8','9','10'];
+  const medals = ['🥇','🥈','🥉',...Array.from({length: 27}, (_,i)=>`${i+4}`)];
+  const whyMap = window._whyTopMap || {};
   document.getElementById('rankingList').innerHTML = sorted.map((p, i) => {
     const d = new Date(p.timestamp || p.posted_at);
     const dateStr = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}`;
@@ -1236,10 +1243,95 @@ function renderTopRanking(posts, type) {
           <span>📅 ${dateStr}</span>
           <span>📝 ${(p.text||'').length}文字</span>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="generateSimilarPost(${i})" style="font-size:10px;padding:3px 10px;">✨ この投稿ベースで生成</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+          <button class="btn btn-sm btn-outline" onclick="generateSimilarPost(${i})" style="font-size:10px;padding:3px 10px;">✨ 類似投稿を生成</button>
+          ${whyMap[p.id || i] ? `<span style="font-size:10px;background:var(--gold-light);color:var(--gold);padding:2px 8px;border-radius:20px;">${whyMap[p.id || i]}</span>` : ''}
+        </div>
       </div>
     </div>`;
   }).join('');
+}
+
+// ===== なぜバズったか分析 =====
+async function analyzeWhyTop() {
+  if (!settings.claudeKey) { showToast('Claude APIキーを設定してくださいっちゃ！'); return; }
+  const posts = window._currentRankingPosts || window._dashboardPosts || [];
+  if (!posts.length) { showToast('先にデータ更新してくださいっちゃ！'); return; }
+
+  showLoading(true, 'なぜバズったか分析中...');
+  document.getElementById('btnWhyTop').disabled = true;
+  try {
+    const top = posts.slice(0, 10);
+    const avgViews = Math.round(posts.reduce((s,p)=>s+(p.views||0),0)/posts.length);
+    const postList = top.map((p, i) =>
+      `[${i+1}位] 閲覧:${p.views} いいね:${p.likes} 文字:${(p.text||'').length}字\n${(p.text||'').slice(0,120)}`
+    ).join('\n\n');
+
+    const system = `あなたはSNSマーケティングの専門家です。Threadsの投稿データを分析し、バズった理由を簡潔に言語化します。`;
+    const prompt = `以下はプレ花嫁向けThreadsアカウントのTOP10投稿です（アカウント平均閲覧: ${avgViews}）。
+
+${postList}
+
+各投稿について「なぜバズったか」を以下のJSON形式で返してください：
+{
+  "1": "理由（15文字以内）",
+  "2": "理由（15文字以内）",
+  ...
+  "10": "理由（15文字以内）"
+}
+
+理由の例：「共感型の体験談」「有益な情報提供」「疑問形で参加促進」「ビフォーアフター」「感情的なストーリー」など短く核心をついた表現で。
+JSONのみ返してください。`;
+
+    const result = await callClaude(system, prompt);
+    try {
+      const json = JSON.parse(result.replace(/```json|```/g, '').trim());
+      const whyMap = {};
+      top.forEach((p, i) => {
+        whyMap[p.id || i] = json[String(i+1)] || '';
+      });
+      window._whyTopMap = whyMap;
+
+      // ランキング再描画（なぜを表示）
+      const activeChip = document.querySelector('#rankingCard .theme-chip.active');
+      const currentType = activeChip?.textContent.includes('閲覧') ? 'views' : activeChip?.textContent.includes('いいね') ? 'likes' : 'eng';
+      renderTopRanking(window._dashboardPosts || [], currentType, top.length);
+
+      const whyEl = document.getElementById('whyTopAnalysis');
+      whyEl.innerHTML = `<div class="alert alert-success">✅ 各投稿の「なぜバズったか」を黄色タグで表示したっちゃ！</div>`;
+      whyEl.style.display = 'block';
+    } catch {
+      showToast('分析結果のパースに失敗したっちゃ');
+    }
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnWhyTop').disabled = false;
+  }
+}
+
+// ===== 自動投稿キューに送信 =====
+async function addToAutoQueue(text) {
+  try {
+    showLoading(true, '自動投稿キューに追加中...');
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'addToQueue', text }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      const d = new Date(data.scheduledAt);
+      const jst = new Date(d.getTime() + 9*60*60*1000);
+      showToast(`✅ 自動投稿キューに追加！予定: ${jst.getMonth()+1}/${jst.getDate()} ${jst.getHours()}時`);
+    } else {
+      showToast('エラー: ' + (data.error || '不明'));
+    }
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
 }
 
 // ===== ランキング投稿から類似生成 =====
@@ -1285,7 +1377,8 @@ ${post.text}
         <div class="suggestion-text">${t.replace(/\n/g,'<br>').replace(/</g,'&lt;').replace(/&lt;br&gt;/g,'<br>')}</div>
         <div class="suggestion-actions">
           <button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(${JSON.stringify(t)}).then(()=>showToast('コピーしたっちゃ！'))">📋 コピー</button>
-          <button class="btn btn-sm btn-primary" onclick="saveGeneratedPost(${JSON.stringify(t).replace(/'/g, '&#39;')}, 'ランキングベース生成')">💾 保存</button>
+          <button class="btn btn-sm btn-primary" onclick="saveGeneratedPost(${JSON.stringify(t).replace(/'/g,'&#39;')}, 'ランキングベース生成')">💾 保存</button>
+          <button class="btn btn-sm btn-gold" onclick="addToAutoQueue(${JSON.stringify(t)})">🤖 自動投稿に追加</button>
         </div>
       </div>`;
     }).join('');
@@ -1339,6 +1432,7 @@ ${top5Text}
         <div class="suggestion-actions">
           <button class="btn btn-sm btn-outline" onclick="navigator.clipboard.writeText(${JSON.stringify(t)}).then(()=>showToast('コピーしたっちゃ！'))">📋 コピー</button>
           <button class="btn btn-sm btn-primary" onclick="saveGeneratedPost(${JSON.stringify(t).replace(/'/g,'&#39;')}, 'TOP5ベース生成')">💾 保存</button>
+          <button class="btn btn-sm btn-gold" onclick="addToAutoQueue(${JSON.stringify(t)})">🤖 自動投稿に追加</button>
         </div>
       </div>`;
     }).join('');
