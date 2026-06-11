@@ -465,6 +465,9 @@
   <button class="tab-btn" onclick="showTab('suggest')">
     <span class="tab-icon">✍️</span>投稿提案
   </button>
+  <button class="tab-btn" onclick="showTab('queue')">
+    <span class="tab-icon">📋</span>投稿キュー
+  </button>
   <button class="tab-btn" onclick="showTab('settings')">
     <span class="tab-icon">⚙️</span>設定
   </button>
@@ -690,6 +693,68 @@
       <button class="btn btn-sm btn-outline" onclick="loadSavedSuggestions()">更新</button>
     </div>
     <div id="savedSuggestionsList"></div>
+  </div>
+</div>
+
+<!-- ===== QUEUE TAB ===== -->
+<div class="tab-content" id="tab-queue">
+
+  <!-- フィルター & 更新 -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">📋 GAS投稿キュー</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select class="form-input" id="queueStatusFilter" style="width:auto;padding:6px 10px;font-size:12px;">
+          <option value="待機中">待機中のみ</option>
+          <option value="all">全件</option>
+          <option value="投稿済み">投稿済み</option>
+          <option value="エラー">エラー</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadQueue()" id="btnLoadQueue">🔄 読み込む</button>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--gray);margin-top:4px;">GASスプレッドシートの「投稿キュー」シートを確認・編集できるっちゃ。編集後は必ず「保存」を押してっちゃよ。</p>
+  </div>
+
+  <!-- 新規追加フォーム -->
+  <div class="card">
+    <div class="card-title">➕ 新規追加</div>
+    <div class="form-group">
+      <label class="form-label">投稿テキスト</label>
+      <textarea class="form-input" id="newQueueText" rows="4" placeholder="追加したい投稿テキストを入力するっちゃ"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">投稿予定日時（省略すると自動で次の空きスロットに設定）</label>
+      <input type="datetime-local" class="form-input" id="newQueueScheduledAt" style="max-width:260px;" />
+    </div>
+    <button class="btn btn-gold" onclick="addNewQueueItem()">➕ キューに追加する</button>
+  </div>
+
+  <!-- キュー一覧 -->
+  <div id="queueList"></div>
+
+  <!-- 編集モーダル -->
+  <div id="queueEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;overflow-y:auto;">
+    <div style="background:white;max-width:560px;margin:40px auto 20px;border-radius:12px;padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:14px;font-weight:bold;color:var(--dark);">✏️ 投稿を編集</div>
+        <button onclick="closeQueueEditModal()" style="border:none;background:transparent;font-size:20px;cursor:pointer;color:var(--gray);">✕</button>
+      </div>
+      <input type="hidden" id="editQueueRow" />
+      <div class="form-group">
+        <label class="form-label">投稿テキスト</label>
+        <textarea class="form-input" id="editQueueText" rows="7"></textarea>
+        <div id="editQueueCharCount" style="font-size:11px;color:var(--gray);text-align:right;margin-top:2px;">0文字</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">投稿予定日時（JST）</label>
+        <input type="datetime-local" class="form-input" id="editQueueScheduledAt" />
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="closeQueueEditModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="saveQueueEdit()" id="btnSaveQueueEdit">💾 保存する</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1882,6 +1947,193 @@ async function markUsed(id) {
   await sb.from('post_suggestions').update({ used: true }).eq('id', id);
   showToast('使用済みにしたっちゃ！');
   loadSavedSuggestions();
+}
+
+// ===== 投稿キュー =====
+let _queueData = [];
+
+async function loadQueue() {
+  const filter = document.getElementById('queueStatusFilter').value;
+  showLoading(true, 'GASから投稿キューを取得中...');
+  document.getElementById('btnLoadQueue').disabled = true;
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'getQueue', status: filter }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '取得失敗');
+    _queueData = data.data || [];
+    renderQueueList(_queueData);
+    showToast(`${_queueData.length}件を取得したっちゃ！`);
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+    document.getElementById('queueList').innerHTML = `<div class="card"><div class="alert alert-warning">❌ 取得に失敗したっちゃ: ${e.message}<br><small>GASのデプロイURLが最新か確認してみてっちゃよ</small></div></div>`;
+  } finally {
+    showLoading(false);
+    document.getElementById('btnLoadQueue').disabled = false;
+  }
+}
+
+function renderQueueList(items) {
+  const el = document.getElementById('queueList');
+  if (!items.length) {
+    el.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">📭</div><p>該当する投稿がないっちゃ</p></div></div>';
+    return;
+  }
+  const statusColor = { '待機中': '#d4789a', '投稿済み': '#4caf50', 'エラー': '#e57373' };
+  el.innerHTML = items.map((item, idx) => {
+    const jstDate = item.scheduledAt ? formatJST(item.scheduledAt) : '-';
+    const color = statusColor[item.status] || '#aaa';
+    const isTree = item.treeGroup && item.treePos;
+    const treeLabel = isTree ? `<span style="font-size:10px;background:#f7f0e2;color:#c9a96e;padding:1px 6px;border-radius:8px;margin-left:4px;">🌿ツリー${item.treeGroup}-${item.treePos}</span>` : '';
+    const escapedText = (item.text || '').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const canEdit = item.status === '待機中';
+    return `<div class="card" style="border-left:4px solid ${color};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+        <div>
+          <span style="font-size:11px;font-weight:bold;color:${color};">● ${item.status}</span>
+          ${treeLabel}
+          <span style="font-size:10px;color:var(--gray);margin-left:8px;">📅 ${jstDate}</span>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          ${canEdit ? `<button class="btn btn-sm btn-outline" onclick="openQueueEditModal(${item.row}, \`${escapedText}\`, '${item.scheduledAt}')">✏️ 編集</button>` : ''}
+          ${canEdit ? `<button class="btn btn-sm" style="background:#fce4ec;color:#c62828;border:none;padding:5px 10px;border-radius:20px;font-size:11px;cursor:pointer;" onclick="deleteQueueItem(${item.row}, ${idx})">🗑 削除</button>` : ''}
+        </div>
+      </div>
+      <div style="font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all;">${escapeHtml(item.text || '')}</div>
+      <div style="font-size:10px;color:var(--gray);margin-top:6px;">行番号: ${item.row} ${item.postId ? '| 投稿ID: ' + item.postId : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatJST(isoStr) {
+  try {
+    const d = new Date(isoStr);
+    const jst = new Date(d.getTime() + 9*60*60*1000);
+    return `${jst.getUTCFullYear()}/${String(jst.getUTCMonth()+1).padStart(2,'0')}/${String(jst.getUTCDate()).padStart(2,'0')} ${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}`;
+  } catch { return isoStr; }
+}
+
+async function deleteQueueItem(row, idx) {
+  if (!confirm(`この投稿をキューから削除するっちゃ？\n\n"${(_queueData[idx]?.text || '').substring(0, 50)}..."`)) return;
+  showLoading(true, '削除中...');
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'deleteQueueItem', row }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '削除失敗');
+    showToast('削除したっちゃ！');
+    await loadQueue();
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
+function openQueueEditModal(row, text, scheduledAt) {
+  document.getElementById('editQueueRow').value = row;
+  const textarea = document.getElementById('editQueueText');
+  textarea.value = text;
+  updateEditCharCount();
+  textarea.addEventListener('input', updateEditCharCount);
+
+  if (scheduledAt) {
+    const jst = new Date(new Date(scheduledAt).getTime() + 9*60*60*1000);
+    const fmt = jst.toISOString().slice(0,16);
+    document.getElementById('editQueueScheduledAt').value = fmt;
+  } else {
+    document.getElementById('editQueueScheduledAt').value = '';
+  }
+  document.getElementById('queueEditModal').style.display = 'block';
+}
+
+function closeQueueEditModal() {
+  document.getElementById('queueEditModal').style.display = 'none';
+}
+
+function updateEditCharCount() {
+  const len = document.getElementById('editQueueText').value.length;
+  const el = document.getElementById('editQueueCharCount');
+  el.textContent = `${len}文字`;
+  el.style.color = len > 500 ? '#e57373' : 'var(--gray)';
+}
+
+async function saveQueueEdit() {
+  const row = parseInt(document.getElementById('editQueueRow').value);
+  const text = document.getElementById('editQueueText').value;
+  const localDt = document.getElementById('editQueueScheduledAt').value;
+  if (!text.trim()) { showToast('テキストを入力してくださいっちゃ'); return; }
+  if (text.length > 500) { showToast('500文字以内にしてくださいっちゃ'); return; }
+
+  let scheduledAtUTC = null;
+  if (localDt) {
+    const jstDate = new Date(localDt);
+    scheduledAtUTC = new Date(jstDate.getTime() - 9*60*60*1000).toISOString();
+  }
+
+  showLoading(true, '保存中...');
+  document.getElementById('btnSaveQueueEdit').disabled = true;
+  try {
+    const payload = { action: 'updateQueueItem', row, text };
+    if (scheduledAtUTC) payload.scheduledAt = scheduledAtUTC;
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '保存失敗');
+    showToast('保存したっちゃ！');
+    closeQueueEditModal();
+    await loadQueue();
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+    document.getElementById('btnSaveQueueEdit').disabled = false;
+  }
+}
+
+async function addNewQueueItem() {
+  const text = document.getElementById('newQueueText').value.trim();
+  const localDt = document.getElementById('newQueueScheduledAt').value;
+  if (!text) { showToast('テキストを入力してくださいっちゃ！'); return; }
+  if (text.length > 500) { showToast('500文字以内にしてくださいっちゃ'); return; }
+
+  let scheduledAt = null;
+  if (localDt) {
+    const jstDate = new Date(localDt);
+    scheduledAt = new Date(jstDate.getTime() - 9*60*60*1000).toISOString();
+  }
+
+  showLoading(true, '投稿キューに追加中...');
+  try {
+    const payload = { action: 'addToQueue', text };
+    if (scheduledAt) payload.scheduledAt = scheduledAt;
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '追加失敗');
+    const d = new Date(data.scheduledAt);
+    const jst = new Date(d.getTime() + 9*60*60*1000);
+    showToast(`✅ 追加したっちゃ！予定: ${jst.getMonth()+1}/${jst.getDate()} ${jst.getHours()}時`);
+    document.getElementById('newQueueText').value = '';
+    document.getElementById('newQueueScheduledAt').value = '';
+    await loadQueue();
+  } catch (e) {
+    showToast('エラー: ' + e.message);
+  } finally {
+    showLoading(false);
+  }
 }
 
 // ===== UI HELPERS =====
