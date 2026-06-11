@@ -1952,17 +1952,20 @@ async function markUsed(id) {
 // ===== 投稿キュー =====
 let _queueData = [];
 
+async function gasGet(params) {
+  const url = GAS_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'GASエラー');
+  return data;
+}
+
 async function loadQueue() {
   const filter = document.getElementById('queueStatusFilter').value;
   showLoading(true, 'GASから投稿キューを取得中...');
   document.getElementById('btnLoadQueue').disabled = true;
   try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'getQueue', status: filter }),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '取得失敗');
+    const data = await gasGet({ action: 'getQueue', status: filter });
     _queueData = data.data || [];
     renderQueueList(_queueData);
     showToast(`${_queueData.length}件を取得したっちゃ！`);
@@ -2023,12 +2026,7 @@ async function deleteQueueItem(row, idx) {
   if (!confirm(`この投稿をキューから削除するっちゃ？\n\n"${(_queueData[idx]?.text || '').substring(0, 50)}..."`)) return;
   showLoading(true, '削除中...');
   try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'deleteQueueItem', row }),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '削除失敗');
+    await gasGet({ action: 'deleteQueueItem', row });
     showToast('削除したっちゃ！');
     await loadQueue();
   } catch (e) {
@@ -2082,14 +2080,9 @@ async function saveQueueEdit() {
   showLoading(true, '保存中...');
   document.getElementById('btnSaveQueueEdit').disabled = true;
   try {
-    const payload = { action: 'updateQueueItem', row, text };
-    if (scheduledAtUTC) payload.scheduledAt = scheduledAtUTC;
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '保存失敗');
+    const params = { action: 'updateQueueItem', row, text };
+    if (scheduledAtUTC) params.scheduledAt = scheduledAtUTC;
+    await gasGet(params);
     showToast('保存したっちゃ！');
     closeQueueEditModal();
     await loadQueue();
@@ -2115,14 +2108,9 @@ async function addNewQueueItem() {
 
   showLoading(true, '投稿キューに追加中...');
   try {
-    const payload = { action: 'addToQueue', text };
-    if (scheduledAt) payload.scheduledAt = scheduledAt;
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '追加失敗');
+    const params = { action: 'addToQueue', text };
+    if (scheduledAt) params.scheduledAt = scheduledAt;
+    const data = await gasGet(params);
     const d = new Date(data.scheduledAt);
     const jst = new Date(d.getTime() + 9*60*60*1000);
     showToast(`✅ 追加したっちゃ！予定: ${jst.getMonth()+1}/${jst.getDate()} ${jst.getHours()}時`);
